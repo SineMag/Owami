@@ -32,9 +32,13 @@ export default function FromIngredients() {
   };
   const save = async () => {
     if (!result) return;
-    setBusy(true);
-    try { const r = await api.saveGenerated({ ...result, image_url: result.image_url || "https://images.unsplash.com/photo-1766596737206-214abffe65bf?w=800&q=80" }); router.replace(`/recipe/${r.id}`); }
-    finally { setBusy(false); }
+    setBusy(true); setErr(null);
+    try {
+      const r = await api.saveGenerated({ ...result, image_url: result.image_url || "https://images.unsplash.com/photo-1766596737206-214abffe65bf?w=800&q=80" });
+      router.replace(`/recipe/${r.id}`);
+    } catch (e: any) {
+      setErr("We couldn't save that recipe. Try again.");
+    } finally { setBusy(false); }
   };
 
   return (

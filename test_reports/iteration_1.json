@@ -1,0 +1,37 @@
+{
+  "summary": "Full backend + frontend regression for Owami cooking app. Backend: 24/24 pytest tests pass (100%) including the critical save-to-cookbook bug fix (Ingredient/RecipeIn field_validator correctly coerces Gemini's numeric quantities and mixed types to str/int). Frontend end-to-end verified: premium login -> Create -> What's in my kitchen? -> added [chicken, tomato, rice, onion, garlic] -> Cook something up -> AI generated 'One-Pot Chicken and Tomato Rice' in ~7s -> Save to cookbook navigated to /recipe/{id} with hero image, DINNER category, Prep/Cook/Serves/Level meta, ingredients, instructions, and Start Cooking CTA all rendering. Icons render as proper vector glyphs (MDI PUA codepoints visible: back-arrow, share, heart, bookmark, timer, flame, users, chef-hat, tab-bar icons) — NOT tofu. Save-to-cookbook bug is FIXED.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is ~725 lines — approaching the 700-line soft cap; consider splitting auth/recipes/ai/subscription into modules for maintainability.",
+    "PUT /api/recipes/{rid} uses body.dict() which drops owner_id/created_at/likes_count fields from the doc on update — data survives via $set but any missing pydantic default would silently overwrite. Consider $set with model_dump(exclude_unset=True) or explicit field list.",
+    "get_recipe (/api/recipes/{rid}) is public (no auth) which is intentional for shareable links; ensure no PII leaks — currently only owner_name is exposed which is acceptable.",
+    "_extract_json regex fallback uses greedy .* which could grab wrong span for messy LLM output — the field_validator safety belt covers this well.",
+    "on_event startup/shutdown are deprecated in FastAPI — migrate to lifespan handler."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (created — 24 pytest tests covering auth, recipes, likes/saves/history, subscription, AI including save-generated bug regression with numeric quantities, meal plan gating, preferences)"
+  ],
+  "success_rate": {
+    "backend": "100% (24/24)",
+    "frontend": "100% on the tested critical flows (login, tab nav, kitchen -> AI generate -> save-to-cookbook -> /recipe/{id})"
+  },
+  "seed_data_creation": "None. Seed users (cook@owami.app, premium@owami.app) and 16 seed recipes are auto-populated on backend startup. Register/delete flow used disposable test user prefixed with 'test_<ts>@owami.app'.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend URL is https://cookist-mode.preview.emergentagent.com (via EXPO_PUBLIC_BACKEND_URL). Test creds: cook@owami.app/owami123 (free), premium@owami.app/owami123 (premium). AI (Gemini 3 Flash) latency ~7s. Playwright: tab bar 'Create' text collides with header 'Create' — use .last for tab click. Login uses two <input> and a 'Sign in' text button; role='button' not detected reliably, use get_by_text('Sign in', exact=True).last. AI response and Save button appears reliably within 10s. Icons use MDI PUA codepoints (U+E000..F8FF).",
+  "rca_of_issue": "Original bug: POST /api/ai/save-generated returned 422 when Gemini returned numeric (int/float) quantities/units or dict-shaped instruction steps because Pydantic Ingredient/RecipeIn required str/List[str]. FIX (verified in server.py lines 125-167): Ingredient has field_validator(mode='before') coercing name/quantity/unit to str; RecipeIn has field_validator coercing instructions/tags to list-of-str (unwrapping dicts via 'text'/'step' keys) and prep_time/cook_time/servings to int via int(float(v)). Regression test test_save_generated_with_forced_numeric_quantities feeds explicit numeric/float/null/dict payload -> 200 with all fields coerced correctly. E2E playwright confirms Gemini-generated recipe (containing 500, 1.5, 3 as raw numerics for quantity) saves cleanly and lands on /recipe/{id}."
+}

@@ -19,7 +19,7 @@ from fastapi.concurrency import run_in_threadpool
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone
 
 ROOT_DIR = Path(__file__).parent
@@ -127,6 +127,18 @@ class Ingredient(BaseModel):
     quantity: str = ""
     unit: str = ""
 
+    @field_validator("quantity", "unit", mode="before")
+    @classmethod
+    def _coerce(cls, v):
+        if v is None: return ""
+        return str(v)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _coerce_name(cls, v):
+        if v is None: return ""
+        return str(v)
+
 class RecipeIn(BaseModel):
     title: str
     description: str = ""
@@ -139,6 +151,20 @@ class RecipeIn(BaseModel):
     ingredients: List[Ingredient] = []
     instructions: List[str] = []
     tags: List[str] = []
+
+    @field_validator("instructions", "tags", mode="before")
+    @classmethod
+    def _coerce_str_list(cls, v):
+        if v is None: return []
+        return [str(x) if not isinstance(x, dict) else str(x.get("text") or x.get("step") or x)
+                for x in v]
+
+    @field_validator("prep_time", "cook_time", "servings", mode="before")
+    @classmethod
+    def _coerce_int(cls, v):
+        if v is None or v == "": return 0
+        try: return int(float(v))
+        except Exception: return 0
 
 class IngredientList(BaseModel):
     ingredients: List[str]

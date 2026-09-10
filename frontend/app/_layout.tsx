@@ -1,7 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
-import { LogBox, Platform } from "react-native";
-import { useEffect } from "react";
+import { LogBox, Platform, View } from "react-native";
+import { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -14,19 +14,20 @@ import { AuthProvider } from "@/src/hooks/useAuth";
 
 LogBox.ignoreAllLogs(true);
 
-// Prewarm the icon font so it never renders as boxed placeholders in Expo Go on Android.
-// This has to be done at the top level and awaited before UI mounts icons.
-async function prewarmIcons() {
-  try {
-    const fontFile = (MDIcon as any)?.font;
-    if (fontFile) {
-      await Font.loadAsync(fontFile);
-    }
-  } catch {}
-}
-
 export default function RootLayout() {
-  useEffect(() => { prewarmIcons(); }, []);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    (async () => {
+      try {
+        const f = (MDIcon as any)?.font;
+        if (f) await Font.loadAsync(f);
+      } catch {}
+      setReady(true);
+    })();
+  }, []);
+  if (!ready) {
+    return <View style={{ flex: 1, backgroundColor: "#FDFBF7" }} />;
+  }
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>

@@ -101,7 +101,22 @@ export const api = {
 
   fromIngredients: (ingredients: string[]) =>
     req<any>("POST", "/ai/from-ingredients", { ingredients }),
-  saveGenerated: (r: any) => req<Recipe>("POST", "/ai/save-generated", r),
+  saveGenerated: (r: any) => {
+    // Coerce Gemini's numeric quantities/units to strings — backend accepts either now,
+    // but this keeps older backends happy too.
+    const safe = {
+      ...r,
+      ingredients: (r.ingredients || []).map((i: any) => ({
+        name: String(i.name ?? ""),
+        quantity: i.quantity == null ? "" : String(i.quantity),
+        unit: i.unit == null ? "" : String(i.unit),
+      })),
+      instructions: (r.instructions || []).map((s: any) =>
+        typeof s === "string" ? s : (s?.text || s?.step || String(s))),
+      tags: (r.tags || []).map((t: any) => String(t)),
+    };
+    return req<Recipe>("POST", "/ai/save-generated", safe);
+  },
   ask: (question: string, recipe_id?: string, current_step?: number) =>
     req<{ answer: string }>("POST", "/ai/ask", { question, recipe_id, current_step }),
   scale: (recipe_id: string, servings: number) =>
