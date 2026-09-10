@@ -12,6 +12,7 @@ from typing import List, Optional, Dict, Any
 
 import bcrypt
 import jwt
+import httpx
 import requests
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Header, Query
 from fastapi.responses import Response
@@ -126,6 +127,9 @@ class ProfileUpdateIn(BaseModel):
     display_name: Optional[str] = None
     avatar_url: Optional[str] = None
 
+class SessionIn(BaseModel):
+    session_id: str
+
 class Ingredient(BaseModel):
     name: str
     quantity: str = ""
@@ -225,6 +229,48 @@ async def login(body: LoginIn):
     if not user or not verify_pw(body.password, user["password_hash"]):
         raise HTTPException(401, "Invalid credentials")
     user.pop("_id", None); user.pop("password_hash", None)
+    return {"token": make_token(user["id"]), "user": user}
+
+# Emergent-managed Google sign-in: frontend obtains a one-time session_id and
+# posts it here. We exchange it for user info at the Emergent auth service, then
+# upsert the user and mint OUR standard JWT so every other endpoint keeps working.
+@api.post("/auth/session")
+async def auth_session(body: SessionIn):
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.get(
+                "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+                headers={"X-Session-ID": body.session_id},
+            )
+    except Exception:
+        raise HTTPException(401, "Google sign-in failed")
+    if r.status_code != 200:
+        raise HTTPException(401, "Google sign-in failed")
+    data = r.json()
+    email = (data.get("email") or "").lower().strip()
+    if not email:
+        raise HTTPException(401, "Google sign-in failed")
+    name = data.get("name") or email.split("@")[0]
+    picture = data.get("picture") or ""
+    user = await db.users.find_one({"email": email})
+    if not user:
+        uid = str(uuid.uuid4())
+        user = {
+            "id": uid, "email": email, "display_name": name,
+            # Random unusable password hash — user signed in via Google
+            "password_hash": hash_pw(uuid.uuid4().hex),
+            "avatar_url": picture, "is_premium": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "preferences": {"diet": [], "cuisines": [], "liked_ingredients": [], "disliked": [], "onboarded": False},
+            "auth_provider": "google",
+        }
+        await db.users.insert_one(user.copy())
+    else:
+        # Backfill avatar/name for returning google users if we don't have them
+        updates: Dict[str, Any] = {}
+        if not user.get("avatar_url") and picture: updates["avatar_url"] = picture
+        if updates: await db.users.update_one({"id": user["id"]}, {"$set": updates})
+    user = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0})
     return {"token": make_token(user["id"]), "user": user}
 
 @api.get("/auth/me")
