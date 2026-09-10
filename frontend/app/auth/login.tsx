@@ -16,7 +16,7 @@ export default function Login() {
 
   const onSubmit = async () => {
     setBusy(true); setErr(null);
-    try { await signIn(email, password); router.replace("/(tabs)/home"); }
+    try { await signIn(email, password); router.replace("/"); }
     catch (e: any) { setErr("We couldn't sign you in. Please check your details."); }
     finally { setBusy(false); }
   };

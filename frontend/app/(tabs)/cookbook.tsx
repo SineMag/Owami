@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
+import MDIcon from "@react-native-vector-icons/material-design-icons";
 import { api, Recipe } from "@/src/api/client";
 import { RecipeCard } from "@/src/components/recipe-card";
 import { colors, radii, spacing } from "@/src/theme";
@@ -11,6 +13,7 @@ type Tab = typeof TABS[number];
 
 export default function Cookbook() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("Saved");
   const saved = useQuery({ queryKey: ["saves"], queryFn: () => api.mySaves() });
   const liked = useQuery({ queryKey: ["likes"], queryFn: () => api.myLikes() });
@@ -22,7 +25,13 @@ export default function Cookbook() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <View style={[{ paddingTop: insets.top + spacing.md, paddingHorizontal: spacing.xl }]}>
-        <Text style={styles.h1}>My Cookbook</Text>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+          <Text style={styles.h1}>My Cookbook</Text>
+          <Pressable testID="cookbook-meal-plan" onPress={() => router.push("/meal-plan")} hitSlop={10} style={styles.planBtn}>
+            <MDIcon name="calendar-week" size={18} color={colors.brandPrimary} />
+            <Text style={{ color: colors.brandPrimary, fontWeight: "700", fontSize: 13 }}>Meal plan</Text>
+          </Pressable>
+        </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingVertical: spacing.md }} style={{ maxHeight: 56 }}>
           {TABS.map(t => {
             const active = t === tab;
@@ -60,5 +69,6 @@ export default function Cookbook() {
 }
 const styles = StyleSheet.create({
   h1: { fontSize: 28, color: colors.onSurface, fontWeight: "700" },
+  planBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, paddingVertical: 8, borderRadius: radii.pill },
   chip: { height: 36, paddingHorizontal: 14, borderRadius: radii.pill, alignItems: "center", justifyContent: "center", borderWidth: 1 },
 });

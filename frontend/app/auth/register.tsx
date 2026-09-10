@@ -21,7 +21,7 @@ export default function Register() {
       return;
     }
     setBusy(true); setErr(null);
-    try { await signUp(email, password, name.trim()); router.replace("/(tabs)/home"); }
+    try { await signUp(email, password, name.trim()); router.replace("/onboarding"); }
     catch (e: any) { setErr(e?.message === "Email already registered" ? "That email already has a cookbook." : "We couldn't create your account. Try again."); }
     finally { setBusy(false); }
   };

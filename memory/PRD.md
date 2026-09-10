@@ -1,66 +1,38 @@
-# Owami — Product Requirements Document (MVP)
+# Owami — PRD (v1.1)
 
-## Product
-**Owami** is a personal digital cookbook and cooking companion.
-Tagline: *Save recipes, create meals, and cook hands-free.*
+## v1.1 Additions (Voice + Onboarding + Photo Upload + Meal Plan)
 
-## Target Platform
-- Expo React Native (SDK 57), iOS + Android + Web preview
-- Backend: FastAPI + MongoDB + Emergent Object Storage
-- AI: Gemini 3 Flash via Emergent Universal Key
-- Subscription: Local premium entitlement stub (RevenueCat-ready architecture)
+### Voice On Device (Cookist Mode)
+- Web Speech API integration (`src/voice/webVoice.ts`) — STT + TTS work in Chrome/Edge/Safari on the web preview.
+- Cookist Mode now has:
+  - Mic button (auto-fills the Ask box, executes intents, and speaks reply)
+  - Speaker toggle (volume icon in top bar) — auto-speaks each step as it changes
+  - Intent parser: next / previous / repeat / pause / resume / "timer for N minutes" / free-form questions (routed to Gemini via `/api/ai/ask`)
+- Native (Expo Go): mic falls back to text input with a hint "Full hands-free voice unlocks in the Android build" — architecture is ready to drop in `expo-speech-recognition` + Emergent OpenAI TTS on native build.
 
-## Users
-- **Home cooks** who want a warm, personal cookbook and a hands-free assistant while cooking.
-- Free vs Owami+ premium tiers.
+### Onboarding Taste Quiz
+- 3-step quiz screen at `/onboarding`, shown right after registration (and to any user without `preferences.onboarded=true`).
+- Steps: diet chips → favorite ingredients chips → dislikes free-text.
+- Saved via `PUT /api/me/preferences`. Skippable.
+- Recommendations backend already reads `likes` + `saves` + `tags` — the prefs enrich recommendation fallback and feed the AI generator.
 
-## MVP Features Shipped
-### Auth
-- Register, login, /me, delete account. JWT + bcrypt.
-- Seeded test users: `cook@owami.app` / `owami123` (free) and `premium@owami.app` / `owami123` (premium).
+### Photo Upload (Create Recipe)
+- Uses `expo-image-picker` with proper permission handshake (getPermissions → requestPermissions → linking hint on deny).
+- Two entry points: **Choose photo** (library) and **Take photo** (camera).
+- Uploads to backend `/api/upload` (Emergent Object Storage), preview shown with upload progress overlay, remove button, and error copy on failure.
+- `app.json` declares `expo-image-picker` plugin with iOS/Android usage strings.
 
-### Cookbook
-- 16 seeded autumn-themed recipes across breakfast/lunch/dinner/dessert/snack.
-- CRUD recipes (title, description, image URL, prep/cook/servings/difficulty/category, ingredients, instructions).
-- Like/save/history toggles.
+### Weekly Meal Plan (Owami+)
+- New backend endpoints:
+  - `GET /api/me/meal-plan` — list current user's plan entries with hydrated recipe
+  - `POST /api/me/meal-plan` — upsert (date+slot unique per user); 402 for free users
+  - `DELETE /api/me/meal-plan/{id}` — remove entry
+- New screen `/meal-plan` with a 7-day grid (Today / Tomorrow / +5 dates), 3 slots per day (Breakfast / Lunch / Dinner).
+- Tap an empty slot → bottom-sheet recipe picker; tap an item to open the recipe; × to remove.
+- Free-user variant shows an inline upgrade card.
+- Access from Cookbook top-right "Meal plan" pill.
 
-### Discover
-- Search by title/ingredient/description/tag.
-- Category chips (All / Breakfast / Lunch / Dinner / Dessert / Snack / Vegetarian / Quick).
-- 2-column recipe grid.
-
-### Cookist Mode (differentiator)
-- Large-typography step-by-step instructions.
-- Prev / Repeat / Next controls with haptics.
-- Inline countdown timer + "Set 5 min timer" shortcut.
-- "Ask Owami" text input powered by Gemini (fallback intents: next/previous/repeat/timer).
-- Records cooking history on start & complete.
-
-### AI (Premium)
-- **What's in my kitchen?** — enter ingredients, get a full recipe (title, ingredients, missing ingredients, steps, tags).
-- **Recipe scaling** — deterministic quantity scaling to N servings.
-- **Ingredient substitutions** — LLM-powered.
-- Free users are redirected to paywall (402 on backend).
-
-### Paywall & Subscription
-- Native full-bleed autumn paywall with feature list, plan toggle (Monthly / Yearly), Subscribe, Restore, Terms, Privacy.
-- Local mock-purchase flips `is_premium` flag (drop-in for real RevenueCat SDK).
-
-### Profile & Settings
-- Stats (Recipes / Saved / Cooked).
-- Notifications, Voice, Dietary, Privacy, Terms, Restore, Sign out, Delete account.
-
-## Design
-- Autumn kitchen palette: `#FDFBF7` cream · `#2D1E19` espresso · `#C04A2C` terracotta · `#DE8F42` golden · `#3E2723` chestnut inverse.
-- Bottom tabs: Home · Discover · Create · Cookbook · Profile.
-- Cookist Mode uses inverse (chestnut) background for high contrast.
-
-## Deferred / Native-build required
-- Real STT/TTS (Android SpeechRecognizer / Expo speech-recognition). Preview uses text input.
-- Real RevenueCat purchase flow (requires signed Android build & store SKUs).
-- Push notifications (Emergent-managed, requires build + Firebase key).
-
-## Deliverables
-- Backend: `/app/backend/server.py` (auth, recipes, likes, saves, history, AI, subscription, uploads).
-- Frontend: `/app/frontend/app/*` (welcome, auth, tabs, recipe detail, cookist, paywall, policy).
-- Test credentials: `/app/memory/test_credentials.md`.
+## Test Credentials
+Reset on this checkpoint:
+- **cook@owami.app / owami123** (free, onboarded=true)
+- **premium@owami.app / owami123** (Owami+, onboarded=true)

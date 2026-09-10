@@ -8,6 +8,7 @@ export type User = {
   display_name: string;
   avatar_url?: string;
   is_premium?: boolean;
+  preferences?: { diet?: string[]; liked_ingredients?: string[]; disliked?: string[]; onboarded?: boolean };
 };
 
 export type Ingredient = { name: string; quantity: string; unit: string };
@@ -107,6 +108,36 @@ export const api = {
     req<{ servings: number; ingredients: Ingredient[] }>("POST", "/ai/scale", { recipe_id, servings }),
   substitute: (ingredient: string, recipe_id?: string) =>
     req<{ substitutes: { name: string; note: string }[] }>("POST", "/ai/substitute", { ingredient, recipe_id }),
+
+  setPrefs: (prefs: { diet: string[]; liked_ingredients: string[]; disliked: string[]; onboarded: boolean }) =>
+    req<User>("PUT", "/me/preferences", prefs),
+
+  mealPlan: () => req<{ plan: any; recipe: Recipe }[]>("GET", "/me/meal-plan"),
+  addMealPlan: (date: string, slot: string, recipe_id: string) =>
+    req("POST", "/me/meal-plan", { date, slot, recipe_id }),
+  removeMealPlan: (id: string) => req("DELETE", `/me/meal-plan/${id}`),
+
+  uploadImage: async (uri: string) => {
+    const form = new FormData();
+    const name = uri.split("/").pop() || "photo.jpg";
+    const ext = (name.split(".").pop() || "jpg").toLowerCase();
+    const type = ext === "png" ? "image/png" : "image/jpeg";
+    // web needs a real Blob; native takes {uri,name,type}
+    // @ts-ignore
+    if (typeof window !== "undefined" && typeof (globalThis as any).Blob !== "undefined" && uri.startsWith("blob:")) {
+      const blob = await (await fetch(uri)).blob();
+      form.append("file", blob as any, name);
+    } else {
+      form.append("file", { uri, name, type } as any);
+    }
+    const res = await fetch(`${BASE}/api/upload`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${TOKEN || ""}` },
+      body: form as any,
+    });
+    if (!res.ok) throw new Error(`upload ${res.status}`);
+    return res.json() as Promise<{ path: string; url: string }>;
+  },
 
   categories: () => req<string[]>("GET", "/categories"),
 };

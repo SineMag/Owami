@@ -30,7 +30,10 @@ export default function Home() {
     <ScrollView style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: spacing.xxxl }}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.greet}>{greet()}, {user?.display_name?.split(" ")[0] || "Cookist"} <Text>👩🏾‍🍳</Text></Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <Text style={styles.greet}>{greet()}, {user?.display_name?.split(" ")[0] || "Cookist"}</Text>
+            <MDIcon name="chef-hat" size={22} color={colors.brandPrimary} />
+          </View>
           <Text style={styles.sub}>Save recipes, create meals, and cook hands-free.</Text>
         </View>
         <Pressable testID="home-profile-button" onPress={() => router.push("/(tabs)/profile")} style={styles.avatar}>

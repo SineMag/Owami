@@ -9,8 +9,9 @@ export default function Index() {
   const router = useRouter();
   useEffect(() => {
     if (loading) return;
-    if (user) router.replace("/(tabs)/home");
-    else router.replace("/auth/welcome");
+    if (!user) { router.replace("/auth/welcome"); return; }
+    if (!user.preferences?.onboarded) { router.replace("/onboarding"); return; }
+    router.replace("/(tabs)/home");
   }, [user, loading]);
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>

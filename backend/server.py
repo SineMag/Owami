@@ -156,6 +156,17 @@ class SubIn(BaseModel):
     ingredient: str
     recipe_id: Optional[str] = None
 
+class PrefsIn(BaseModel):
+    diet: List[str] = []
+    liked_ingredients: List[str] = []
+    disliked: List[str] = []
+    onboarded: bool = True
+
+class MealPlanIn(BaseModel):
+    date: str  # ISO YYYY-MM-DD
+    slot: str  # breakfast | lunch | dinner
+    recipe_id: str
+
 # ---------------------------------------------------------------- Auth routes
 @api.post("/auth/register")
 async def register(body: RegisterIn):
@@ -460,6 +471,40 @@ async def ai_substitute(body: SubIn, user=Depends(get_user)):
     data = _extract_json(text)
     if not isinstance(data, list): raise HTTPException(502, "AI parse error")
     return {"substitutes": data}
+
+# ---------------------------------------------------------------- Preferences (onboarding)
+@api.put("/me/preferences")
+async def set_prefs(body: PrefsIn, user=Depends(get_user)):
+    await db.users.update_one({"id": user["id"]}, {"$set": {"preferences": body.dict()}})
+    updated = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0})
+    return updated
+
+# ---------------------------------------------------------------- Meal plans (premium)
+@api.get("/me/meal-plan")
+async def list_meal_plan(user=Depends(get_user)):
+    plans = await db.meal_plans.find({"user_id": user["id"]}, {"_id": 0}).to_list(200)
+    rids = list({p["recipe_id"] for p in plans})
+    recipes = {r["id"]: r for r in await db.recipes.find({"id": {"$in": rids}}, {"_id": 0}).to_list(len(rids))}
+    return [{"plan": p, "recipe": recipes.get(p["recipe_id"])} for p in plans if recipes.get(p["recipe_id"])]
+
+@api.post("/me/meal-plan")
+async def add_meal_plan(body: MealPlanIn, user=Depends(get_user)):
+    if not user.get("is_premium"):
+        raise HTTPException(402, "Owami+ required")
+    existing = await db.meal_plans.find_one({"user_id": user["id"], "date": body.date, "slot": body.slot})
+    if existing:
+        await db.meal_plans.update_one({"id": existing["id"]}, {"$set": {"recipe_id": body.recipe_id}})
+        return {"id": existing["id"], **body.dict(), "user_id": user["id"]}
+    pid = str(uuid.uuid4())
+    doc = {"id": pid, "user_id": user["id"], **body.dict(),
+           "created_at": datetime.now(timezone.utc).isoformat()}
+    await db.meal_plans.insert_one(doc.copy())
+    return _clean(doc)
+
+@api.delete("/me/meal-plan/{pid}")
+async def remove_meal_plan(pid: str, user=Depends(get_user)):
+    await db.meal_plans.delete_one({"id": pid, "user_id": user["id"]})
+    return {"ok": True}
 
 # ---------------------------------------------------------------- Categories
 @api.get("/categories")

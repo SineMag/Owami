@@ -39,7 +39,14 @@
       "expo-secure-store",
       "expo-web-browser",
       "expo-status-bar",
-      "@react-native-vector-icons/material-design-icons"
+      "@react-native-vector-icons/material-design-icons",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Add a photo to your recipes.",
+          "cameraPermission": "Take a photo of the dish you cooked."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
