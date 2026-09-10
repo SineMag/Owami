@@ -1,0 +1,33 @@
+{
+  "summary": "Iteration 4 verifies the 'Edit preferences from Profile' feature that opens /onboarding?from=settings from a new 'Cooking preferences' row in Settings. Backend: full pytest suite green — 31/31 pass (auth, PATCH /auth/me, recipes, likes/saves/history, subscription, AI generate + save-generated + numeric coercion, AI ask/scale, meal-plan CRUD 402-gating, and the 4 TestPrefs tests including cuisines+skill_level persistence). No regressions. Frontend (390x844 mobile viewport, deployed URL): pre-seeded premium@owami.app with {diet:['Vegetarian'], cuisines:['Italian','Thai'], liked_ingredients:['Pasta'], skill_level:'intermediate', disliked:['peanuts'], onboarded:true} via PUT /api/me/preferences, signed in through the UI, tapped 'Cooking preferences' (testID row-preferences) on Profile — landed on /onboarding?from=settings. Verified: (a) top-right pill text is exactly 'Cancel' (not 'Skip all'); (b) chip pre-fill by comparing computed backgroundColor — Vegetarian bg=rgb(192,74,44) [brandPrimary] vs Vegan bg=rgb(244,237,228) [surfaceSecondary]; Italian+Thai active on step 2, Chinese inactive; Pasta active on step 3; step 4 intermediate card has active border (brandPrimary) vs beginner border (default); step 5 dislikes TextInput value = 'peanuts'; (c) step-5 CTA text is 'Save preferences' with the arrow-right glyph (fresh-user CTA is 'Start cooking'); (d) tapping Save preferences PATCHes /me/preferences and returns to /profile via router.back() (NOT /home). Cancel path: opened edit, toggled Vegetarian off, tapped 'Cancel' — returned to /profile and GET /auth/me confirmed diet still contains 'Vegetarian' (no save). Fresh-user regression: registered reg{ts}@t.io, landed on /onboarding WITHOUT from=settings, top-right shows 'Skip all', step-5 CTA reads 'Start cooking', and Start cooking navigates to /home. Test user deleted after the run and premium prefs reset to empty defaults. No React Native / Expo issues detected (no expo-av, expo-barcode-scanner, expo-background-fetch; onboarding uses useSafeAreaInsets from react-native-safe-area-context, no deprecated SafeAreaView).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "onboarding.tsx correctly reads useLocalSearchParams<{from?:string}>() and the isEditing flag drives all four behaviour changes (Cancel pill, Save preferences label, persist() → router.back(), skipAll() → router.back() without wiping prefs). Prefill effect depends on [isEditing, user?.id] which is fine because refresh() rehydrates user before we ever mount here.",
+    "skipAll() short-circuits with router.back() when isEditing — correct: it does NOT persist an empty prefs object, so Cancel truly discards edits.",
+    "persist() spreads payload after base fields; save uses the current chip state — good.",
+    "Profile row uses router.push('/onboarding?from=settings') — expo-router handles the query param correctly.",
+    "Note (minor, pre-existing): the profile screen still shows a separate 'Dietary preferences' row (line 69 profile.tsx) with no onPress — it's now redundant with the new 'Cooking preferences' row. Consider removing or wiring it to the same target for consistency.",
+    "server.py PrefsIn already supports the required shape (cuisines + skill_level) — no backend changes needed for this iteration."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (31/31)",
+    "frontend": "100% on tested flows (edit happy-path, cancel, fresh-user regression)"
+  },
+  "seed_data_creation": "None persisted. premium@owami.app preferences were mutated during test and reset to empty defaults at the end. One throwaway user reg{ts}@t.io was registered via the register flow and deleted via DELETE /api/auth/me after the fresh-onboarding regression.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Edit preferences opens /onboarding?from=settings. On this screen: (1) onb-skip-all pill text is 'Cancel'; tapping it calls router.back() and does NOT persist. (2) onb-next on the last step reads 'Save preferences' and calls PUT /me/preferences then router.back(). (3) Chip active/inactive can be detected reliably by computed backgroundColor: active=rgb(192,74,44) (colors.brandPrimary), inactive=rgb(244,237,228) (colors.surfaceSecondary). Skill card active via borderColor=rgb(192,74,44). MDIcon on react-native-web renders as an icon-font glyph (not <svg>) so DO NOT match on '<svg>' in innerHTML — use bgcolor. (4) The Profile row testID is row-preferences and lives at the top of the Settings section. (5) Fresh-user regression path: register → /onboarding without ?from=settings → pill 'Skip all' → last CTA 'Start cooking' → /home. Login testIDs: welcome-signin-button, welcome-signup-button, login-email-input, login-password-input, login-submit-button, register-name-input, register-email-input, register-password-input, register-submit-button. Profile tab is reachable by [href=\"/profile\"] on web. Backend still 31/31 green.",
+  "rca_of_issue": "N/A — new feature verified end-to-end. No bugs found."
+}

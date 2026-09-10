@@ -1,4 +1,5 @@
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
@@ -6,24 +7,47 @@ import { Image } from "expo-image";
 import MDIcon from "@react-native-vector-icons/material-design-icons";
 import { colors, radii, spacing } from "@/src/theme";
 import { useAuth } from "@/src/hooks/useAuth";
+import { useSubscription } from "@/src/lib/revenuecat";
 import { api, fileUrl } from "@/src/api/client";
+import { ConfirmModal } from "@/src/components/confirm-modal";
+
+let RevenueCatUI: any = null;
+try { RevenueCatUI = require("react-native-purchases-ui").default ?? require("react-native-purchases-ui"); } catch {}
 
 export default function Profile() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, signOut, refresh } = useAuth();
+  const { isSubscribed, restore } = useSubscription();
   const mine = useQuery({ queryKey: ["mine"], queryFn: () => api.myRecipes() });
   const saved = useQuery({ queryKey: ["saves"], queryFn: () => api.mySaves() });
   const history = useQuery({ queryKey: ["history"], queryFn: () => api.history() });
 
-  const onDelete = () => {
-    Alert.alert("Delete account?", "This will erase your cookbook, likes, saves, and history.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => { await api.deleteMe(); await signOut(); router.replace("/auth/welcome"); } },
-    ]);
+  const [confirm, setConfirm] = useState<null | "signout" | "delete">(null);
+  const [busy, setBusy] = useState(false);
+
+  const doSignOut = async () => {
+    setBusy(true);
+    try { await signOut(); router.replace("/auth/welcome"); }
+    finally { setBusy(false); setConfirm(null); }
   };
-  const onCancel = async () => { await api.cancelSub(); await refresh(); };
-  const onRestore = async () => { await api.restore(); await refresh(); };
+  const doDelete = async () => {
+    setBusy(true);
+    try { await api.deleteMe(); await signOut(); router.replace("/auth/welcome"); }
+    finally { setBusy(false); setConfirm(null); }
+  };
+  const onRestore = async () => {
+    try { await restore(); await refresh(); } catch {}
+  };
+  const openCustomerCenter = async () => {
+    try {
+      if (Platform.OS !== "web" && RevenueCatUI?.presentCustomerCenter) {
+        await RevenueCatUI.presentCustomerCenter();
+      } else {
+        router.push("/paywall");
+      }
+    } catch { router.push("/paywall"); }
+  };
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingHorizontal: spacing.xl, paddingBottom: 120 }}>
@@ -43,7 +67,7 @@ export default function Profile() {
         <View style={{ flex: 1 }}>
           <Text style={styles.name}>{user?.display_name}</Text>
           <Text style={styles.email}>{user?.email}</Text>
-          {user?.is_premium ? (
+          {isSubscribed ? (
             <View style={styles.plusBadgeBig}><MDIcon name="star-four-points" size={12} color={colors.onBrandPrimary} /><Text style={styles.plusBadgeBigText}>Owami+ member</Text></View>
           ) : (
             <Pressable testID="profile-upgrade" onPress={() => router.push("/paywall")} style={styles.upgradeBtn}>
@@ -63,24 +87,48 @@ export default function Profile() {
       </View>
 
       <Text style={styles.section}>Settings</Text>
-      <Row testID="row-notifications" icon="bell-outline" title="Notifications" sub="Timer complete, meal reminders" />
-      <Row testID="row-voice" icon="microphone-outline" title="Voice settings" sub="Speech speed and language" />
-      <Row testID="row-diet" icon="leaf-circle-outline" title="Dietary preferences" sub="Vegetarian, halal, allergies" />
+      <Row testID="row-preferences" icon="tune-variant" title="Cooking preferences" sub="Diet, cuisines, favourites" onPress={() => router.push("/onboarding?from=settings")} />
       <Row testID="row-privacy" icon="shield-outline" title="Privacy policy" onPress={() => router.push("/policy")} />
       <Row testID="row-terms" icon="file-document-outline" title="Terms of service" onPress={() => router.push("/policy?type=terms")} />
 
       <Text style={styles.section}>Subscription</Text>
-      {user?.is_premium ? (
-        <Row testID="row-cancel" icon="cancel" title="Cancel subscription" onPress={onCancel} />
-      ) : null}
+      {isSubscribed ? (
+        <Row testID="row-manage-sub" icon="account-cog-outline" title="Manage subscription" sub="Renewal, cancel, billing" onPress={openCustomerCenter} />
+      ) : (
+        <Row testID="row-upgrade" icon="star-four-points" title="Upgrade to Owami+" sub="Unlock all premium features" onPress={() => router.push("/paywall")} />
+      )}
       <Row testID="row-restore" icon="restore" title="Restore purchases" onPress={onRestore} />
 
       <Text style={styles.section}>Account</Text>
       <Row testID="row-edit" icon="account-edit-outline" title="Edit profile" onPress={() => router.push("/profile/edit")} />
-      <Row testID="row-signout" icon="logout" title="Sign out" onPress={async () => { await signOut(); router.replace("/auth/welcome"); }} />
-      <Row testID="row-delete" icon="trash-can-outline" title="Delete account" danger onPress={onDelete} />
+      <Row testID="row-signout" icon="logout" title="Sign out" onPress={() => setConfirm("signout")} />
+      <Row testID="row-delete" icon="trash-can-outline" title="Delete account" danger onPress={() => setConfirm("delete")} />
 
       <Text style={styles.foot}>Owami · Save recipes, create meals, and cook hands-free.</Text>
+
+      <ConfirmModal
+        testID="signout-modal"
+        visible={confirm === "signout"}
+        icon="logout"
+        title="Sign out of Owami?"
+        message="Your cookbook is safe. You can sign back in any time."
+        confirmText="Sign out"
+        loading={busy && confirm === "signout"}
+        onCancel={() => setConfirm(null)}
+        onConfirm={doSignOut}
+      />
+      <ConfirmModal
+        testID="delete-modal"
+        visible={confirm === "delete"}
+        icon="trash-can-outline"
+        tone="danger"
+        title="Delete your account?"
+        message="This erases your cookbook, likes, saves, cooking history, and preferences. This can't be undone."
+        confirmText="Delete forever"
+        loading={busy && confirm === "delete"}
+        onCancel={() => setConfirm(null)}
+        onConfirm={doDelete}
+      />
     </ScrollView>
   );
 }

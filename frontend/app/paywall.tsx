@@ -1,14 +1,18 @@
 import { useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { useQuery } from "@tanstack/react-query";
 import MDIcon from "@react-native-vector-icons/material-design-icons";
-import { api } from "@/src/api/client";
 import { useAuth } from "@/src/hooks/useAuth";
+import { useSubscription, REVENUECAT_OFFERING_IDENTIFIER } from "@/src/lib/revenuecat";
+import { ConfirmModal } from "@/src/components/confirm-modal";
 import { colors, radii, spacing } from "@/src/theme";
+
+// react-native-purchases-ui is native-only. Try to load it; on web this stays null.
+let RevenueCatUI: any = null;
+try { RevenueCatUI = require("react-native-purchases-ui").default ?? require("react-native-purchases-ui"); } catch {}
 
 const FEATURES = [
   { icon: "microphone-message", title: "Unlimited Cookist Mode", sub: "Hands-free voice cooking, every recipe." },
@@ -23,21 +27,59 @@ export default function Paywall() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { refresh } = useAuth();
-  const sub = useQuery({ queryKey: ["sub"], queryFn: () => api.subStatus() });
-  const [selected, setSelected] = useState<string>("owami_plus_yearly");
-  const [busy, setBusy] = useState(false);
+  const { currentOffering, isSubscribed, identityReady, isLoading, purchase, restore, isPurchasing, isRestoring } = useSubscription();
+  const [confirmPkg, setConfirmPkg] = useState<any>(null);
+  const [err, setErr] = useState<string | null>(null);
 
-  const purchase = async () => {
-    setBusy(true);
-    try { await api.mockPurchase(); await refresh(); router.back(); }
-    catch (e) { setBusy(false); }
+  // Prefer RevenueCat's hosted paywall on native — it uses whatever offering the customer designed.
+  if (Platform.OS !== "web" && RevenueCatUI?.Paywall) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.surfaceInverse }}>
+        <RevenueCatUI.Paywall
+          options={{ offering: currentOffering ?? undefined, displayCloseButton: true }}
+          onDismiss={() => router.back()}
+          onPurchaseCompleted={async () => { await refresh(); router.back(); }}
+          onRestoreCompleted={async () => { await refresh(); }}
+        />
+      </View>
+    );
+  }
+
+  // Web / preview: coded paywall driven by RevenueCat offerings.
+  const packages = currentOffering?.availablePackages ?? [];
+  const [selectedId, setSelectedId] = useState<string | null>(packages[0]?.identifier ?? null);
+  const selectedPkg = packages.find(p => p.identifier === selectedId) ?? packages[0] ?? null;
+
+  const onPurchase = async () => {
+    if (!selectedPkg) return;
+    if (!identityReady) { setErr("Sign in first, then try again."); return; }
+    setConfirmPkg(selectedPkg);
   };
-  const restore = async () => { await api.restore(); await refresh(); };
+  const confirmPurchase = async () => {
+    if (!confirmPkg) return;
+    setErr(null);
+    try {
+      await purchase(confirmPkg);
+      await refresh();
+      setConfirmPkg(null);
+      router.back();
+    } catch (e: any) {
+      const msg = String(e?.message || e);
+      if (/userCancelled|user_cancelled/i.test(msg)) { setConfirmPkg(null); return; }
+      setErr(msg);
+      setConfirmPkg(null);
+    }
+  };
+  const onRestore = async () => {
+    setErr(null);
+    try { await restore(); await refresh(); }
+    catch (e: any) { setErr(String(e?.message || e)); }
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surfaceInverse }}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 200 }}>
-        <View style={{ height: 380 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 220 }}>
+        <View style={{ height: 340 }}>
           <Image source={{ uri: "https://images.unsplash.com/photo-1770926005888-1503cab85fcd?w=1200&q=80" }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
           <LinearGradient colors={["rgba(45,30,25,0.3)", "rgba(45,30,25,0.75)", colors.surfaceInverse]} locations={[0, 0.5, 1]} style={StyleSheet.absoluteFillObject} />
           <Pressable testID="paywall-close" onPress={() => router.back()} style={[styles.close, { top: insets.top + spacing.sm }]}>
@@ -47,6 +89,12 @@ export default function Paywall() {
             <View style={styles.badge}><MDIcon name="star-four-points" size={12} color={colors.onBrandPrimary} /><Text style={styles.badgeT}>Owami+</Text></View>
             <Text style={styles.hero}>Cook smarter with Owami+</Text>
             <Text style={styles.subhero}>Save recipes, create meals, and cook hands-free — with Owami by your side.</Text>
+            {isSubscribed && (
+              <View testID="paywall-active-badge" style={styles.activeBadge}>
+                <MDIcon name="check-circle" size={14} color={colors.onSuccess} />
+                <Text style={styles.activeT}>You're subscribed</Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -63,19 +111,26 @@ export default function Paywall() {
           ))}
 
           <Text style={styles.pickH}>Choose your plan</Text>
-          {sub.isLoading ? <ActivityIndicator color={colors.brandSecondary} /> : (
-            (sub.data?.offerings || []).map((o: any) => {
-              const active = selected === o.id;
+          {isLoading ? (
+            <ActivityIndicator color={colors.brandSecondary} />
+          ) : packages.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyT}>Subscription options are unavailable right now.</Text>
+              <Text style={styles.emptyS}>Please try again later.</Text>
+            </View>
+          ) : (
+            packages.map((p) => {
+              const active = (selectedId ?? packages[0]?.identifier) === p.identifier;
               return (
-                <Pressable key={o.id} testID={`paywall-option-${o.id}`} onPress={() => setSelected(o.id)}
+                <Pressable key={p.identifier} testID={`paywall-option-${p.identifier}`} onPress={() => setSelectedId(p.identifier)}
                   style={[styles.plan, active && { borderColor: colors.brandSecondary, backgroundColor: "rgba(222,143,66,0.1)" }]}
                 >
                   <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                      <Text style={styles.planT}>{o.title}</Text>
-                      {o.badge && <View style={styles.saveBadge}><Text style={styles.saveBadgeT}>{o.badge}</Text></View>}
+                      <Text style={styles.planT}>{p.product.title || p.identifier}</Text>
+                      {p.packageType === "ANNUAL" && <View style={styles.saveBadge}><Text style={styles.saveBadgeT}>Best value</Text></View>}
                     </View>
-                    <Text style={styles.planS}>{o.price} · billed per {o.period}</Text>
+                    <Text style={styles.planS}>{p.product.priceString} · {p.product.description || p.packageType.toLowerCase()}</Text>
                   </View>
                   <View style={[styles.radio, active && { borderColor: colors.brandSecondary, backgroundColor: colors.brandSecondary }]}>
                     {active && <MDIcon name="check" size={14} color={colors.onBrandSecondary} />}
@@ -84,21 +139,39 @@ export default function Paywall() {
               );
             })
           )}
+          {err && <Text style={styles.err} testID="paywall-error">{err}</Text>}
         </View>
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
-        <Pressable testID="paywall-subscribe" onPress={purchase} style={[styles.cta, { opacity: busy ? 0.6 : 1 }]} disabled={busy}>
-          {busy ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.ctaT}>Start cooking with Owami+</Text>}
+        <Pressable testID="paywall-subscribe" onPress={onPurchase} disabled={isPurchasing || !selectedPkg}
+          style={[styles.cta, (isPurchasing || !selectedPkg) && { opacity: 0.6 }]}>
+          {isPurchasing ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.ctaT}>Start cooking with Owami+</Text>}
         </Pressable>
         <View style={styles.legalRow}>
-          <Pressable testID="paywall-restore" onPress={restore}><Text style={styles.legalL}>Restore purchases</Text></Pressable>
+          <Pressable testID="paywall-restore" onPress={onRestore}>
+            <Text style={styles.legalL}>{isRestoring ? "Restoring…" : "Restore purchases"}</Text>
+          </Pressable>
           <Text style={styles.legalD}>·</Text>
           <Pressable onPress={() => router.push("/policy?type=terms")}><Text style={styles.legalL}>Terms</Text></Pressable>
           <Text style={styles.legalD}>·</Text>
           <Pressable onPress={() => router.push("/policy")}><Text style={styles.legalL}>Privacy</Text></Pressable>
         </View>
       </View>
+
+      {/* Confirm modal (Test Store deliberate confirmation) */}
+      <ConfirmModal
+        testID="paywall-confirm"
+        visible={!!confirmPkg}
+        icon="star-four-points"
+        title="Confirm your subscription"
+        message={confirmPkg ? `${confirmPkg.product.title} · ${confirmPkg.product.priceString}` : undefined}
+        confirmText={isPurchasing ? "Subscribing…" : "Subscribe"}
+        cancelText="Not now"
+        loading={isPurchasing}
+        onCancel={() => setConfirmPkg(null)}
+        onConfirm={confirmPurchase}
+      />
     </View>
   );
 }
@@ -109,6 +182,8 @@ const styles = StyleSheet.create({
   badgeT: { color: colors.onBrandPrimary, fontSize: 11, fontWeight: "700", letterSpacing: 0.5 },
   hero: { color: colors.onSurfaceInverse, fontSize: 34, fontWeight: "700", lineHeight: 38 },
   subhero: { color: "#F4EDE4", fontSize: 15, marginTop: 6, opacity: 0.9 },
+  activeBadge: { flexDirection: "row", gap: 6, alignItems: "center", alignSelf: "flex-start", backgroundColor: colors.success, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radii.pill, marginTop: 10 },
+  activeT: { color: colors.onSuccess, fontWeight: "700", fontSize: 12 },
   featRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "rgba(253,251,247,0.08)" },
   featIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(222,143,66,0.15)", alignItems: "center", justifyContent: "center" },
   featT: { color: colors.onSurfaceInverse, fontWeight: "600", fontSize: 15 },
@@ -120,10 +195,20 @@ const styles = StyleSheet.create({
   saveBadge: { backgroundColor: colors.brandSecondary, borderRadius: radii.pill, paddingHorizontal: 8, paddingVertical: 2 },
   saveBadgeT: { color: colors.onBrandSecondary, fontSize: 10, fontWeight: "700" },
   radio: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: "rgba(253,251,247,0.3)", alignItems: "center", justifyContent: "center" },
+  emptyBox: { padding: spacing.lg, backgroundColor: "rgba(253,251,247,0.06)", borderRadius: radii.md },
+  emptyT: { color: colors.onSurfaceInverse, fontWeight: "700" },
+  emptyS: { color: "#CDBCA7", fontSize: 13, marginTop: 4 },
+  err: { color: colors.error, marginTop: spacing.md },
   footer: { position: "absolute", left: 0, right: 0, bottom: 0, padding: spacing.lg, backgroundColor: colors.surfaceInverse, borderTopWidth: 1, borderTopColor: "rgba(253,251,247,0.08)" },
   cta: { backgroundColor: colors.brandPrimary, padding: 18, borderRadius: radii.lg, alignItems: "center" },
   ctaT: { color: colors.onBrandPrimary, fontWeight: "700", fontSize: 16 },
   legalRow: { flexDirection: "row", justifyContent: "center", gap: 10, marginTop: 10 },
   legalL: { color: "#CDBCA7", fontSize: 12 },
   legalD: { color: "#CDBCA7", fontSize: 12 },
+  confirmBackdrop: { position: "absolute", inset: 0 as any, backgroundColor: "rgba(45,30,25,0.6)", alignItems: "center", justifyContent: "center", padding: spacing.xl },
+  confirmCard: { backgroundColor: colors.surface, padding: spacing.xl, borderRadius: radii.lg, alignItems: "center", width: "100%", maxWidth: 340 },
+  confirmH: { color: colors.onSurface, fontSize: 20, fontWeight: "700", marginTop: 8 },
+  confirmS: { color: colors.muted, marginTop: 4, textAlign: "center" },
+  confirmBtn: { flex: 1, padding: 14, borderRadius: radii.md, alignItems: "center", justifyContent: "center" },
+  confirmBtnGhost: { backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
 });

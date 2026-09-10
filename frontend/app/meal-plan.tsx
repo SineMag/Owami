@@ -7,6 +7,7 @@ import { Image } from "expo-image";
 import MDIcon from "@react-native-vector-icons/material-design-icons";
 import { api, fileUrl, Recipe } from "@/src/api/client";
 import { useAuth } from "@/src/hooks/useAuth";
+import { useSubscription } from "@/src/lib/revenuecat";
 import { colors, radii, spacing } from "@/src/theme";
 
 const SLOTS = ["breakfast", "lunch", "dinner"] as const;
@@ -28,6 +29,7 @@ export default function MealPlan() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { isSubscribed } = useSubscription();
   const qc = useQueryClient();
   const days = next7Days();
   const [picker, setPicker] = useState<{ date: string; slot: string } | null>(null);
@@ -46,7 +48,7 @@ export default function MealPlan() {
   };
   const remove = async (id: string) => { await api.removeMealPlan(id); qc.invalidateQueries({ queryKey: ["meal-plan"] }); };
 
-  if (!user?.is_premium) {
+  if (!isSubscribed && !user?.is_premium) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.surface, paddingTop: insets.top + spacing.md, padding: spacing.xl }}>
         <Pressable onPress={() => router.back()} hitSlop={16}><Text style={{ color: colors.muted, marginBottom: spacing.md }}>← Back</Text></Pressable>

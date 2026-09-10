@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import MDIcon from "@react-native-vector-icons/material-design-icons";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/hooks/useAuth";
+import { useSubscription } from "@/src/lib/revenuecat";
 import { colors, radii, spacing } from "@/src/theme";
 
 const SUGGESTED = ["Chicken", "Rice", "Onion", "Garlic", "Tomato", "Egg", "Pasta", "Mushroom", "Spinach", "Ginger"];
@@ -13,6 +14,7 @@ export default function FromIngredients() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, refresh } = useAuth();
+  const { isSubscribed } = useSubscription();
   const [items, setItems] = useState<string[]>([]);
   const [inp, setInp] = useState("");
   const [busy, setBusy] = useState(false);
@@ -23,7 +25,7 @@ export default function FromIngredients() {
   const remove = (v: string) => setItems(items.filter(i => i !== v));
 
   const generate = async () => {
-    if (!user?.is_premium) { router.push("/paywall"); return; }
+    if (!isSubscribed && !user?.is_premium) { router.push("/paywall"); return; }
     if (items.length === 0) { setErr("Add a few ingredients first."); return; }
     setBusy(true); setErr(null); setResult(null);
     try { const r = await api.fromIngredients(items); setResult(r); }
@@ -99,7 +101,7 @@ export default function FromIngredients() {
         )}
 
         <Pressable testID="ai-generate" onPress={generate} style={[styles.cta, { opacity: busy ? 0.6 : 1 }]} disabled={busy}>
-          {busy ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.ctaT}>{user?.is_premium ? "Cook something up" : "Unlock with Owami+"}</Text>}
+          {busy ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.ctaT}>{(isSubscribed || user?.is_premium) ? "Cook something up" : "Unlock with Owami+"}</Text>}
         </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>

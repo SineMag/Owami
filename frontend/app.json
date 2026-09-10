@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "frontend",
+    "name": "Owami",
     "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "frontend",
+    "scheme": "owami",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
@@ -14,7 +14,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#2D1E19"
       },
       "package": "com.emergent.cookistmode.iqg675"
     },
@@ -29,9 +29,9 @@
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-image.png",
-          "imageWidth": 200,
+          "imageWidth": 320,
           "resizeMode": "contain",
-          "backgroundColor": "#000000"
+          "backgroundColor": "#2D1E19"
         }
       ],
       "expo-font",

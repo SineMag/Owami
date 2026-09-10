@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import MDIcon from "@react-native-vector-icons/material-design-icons";
 import { api } from "@/src/api/client";
@@ -28,7 +28,10 @@ const STEPS: Step[] = [
 export default function Onboarding() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { refresh } = useAuth();
+  const { user, refresh } = useAuth();
+  const { from } = useLocalSearchParams<{ from?: string }>();
+  const isEditing = from === "settings";
+
   const [step, setStep] = useState(0);
   const [diet, setDiet] = useState<string[]>([]);
   const [cuisines, setCuisines] = useState<string[]>([]);
@@ -36,6 +39,17 @@ export default function Onboarding() {
   const [skill, setSkill] = useState<string | null>(null);
   const [dislikes, setDislikes] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // Pre-fill from existing prefs when opened from Settings
+  useEffect(() => {
+    if (!isEditing || !user?.preferences) return;
+    const p = user.preferences as any;
+    setDiet(p.diet || []);
+    setCuisines(p.cuisines || []);
+    setFavs(p.liked_ingredients || []);
+    setSkill(p.skill_level || null);
+    setDislikes((p.disliked || []).join(", "));
+  }, [isEditing, user?.id]);
 
   const toggle = (arr: string[], setter: any, v: string) =>
     setter(arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v]);
@@ -50,10 +64,13 @@ export default function Onboarding() {
         onboarded: true, ...payload,
       });
       await refresh();
-      router.replace("/(tabs)/home");
+      if (isEditing) router.back(); else router.replace("/(tabs)/home");
     } finally { setBusy(false); }
   };
-  const skipAll = () => persist({ diet: [], cuisines: [], liked_ingredients: [], disliked: [], skill_level: undefined });
+  const skipAll = () => {
+    if (isEditing) { router.back(); return; }
+    persist({ diet: [], cuisines: [], liked_ingredients: [], disliked: [], skill_level: undefined });
+  };
   const skipStep = () => step < STEPS.length - 1 ? setStep(step + 1) : persist({});
   const cont = () => step < STEPS.length - 1 ? setStep(step + 1) : persist({});
 
@@ -68,7 +85,7 @@ export default function Onboarding() {
         <View style={styles.headerRow}>
           <Text style={styles.kicker}>{s.kicker}</Text>
           <Pressable testID="onb-skip-all" onPress={skipAll} hitSlop={12}>
-            <Text style={styles.skipAll}>Skip all</Text>
+            <Text style={styles.skipAll}>{isEditing ? "Cancel" : "Skip all"}</Text>
           </Pressable>
         </View>
         <Text style={styles.h}>{s.title}</Text>
@@ -129,7 +146,7 @@ export default function Onboarding() {
         <Pressable testID="onb-next" onPress={cont} disabled={busy} style={[styles.btn, styles.btnPrimary, { opacity: busy ? 0.6 : 1 }]}>
           {busy ? <ActivityIndicator color={colors.onBrandPrimary} /> : (
             <>
-              <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>{step === STEPS.length - 1 ? "Start cooking" : "Continue"}</Text>
+              <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>{step === STEPS.length - 1 ? (isEditing ? "Save preferences" : "Start cooking") : "Continue"}</Text>
               <MDIcon name="arrow-right" size={20} color={colors.onBrandPrimary} />
             </>
           )}
