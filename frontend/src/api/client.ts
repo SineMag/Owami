@@ -70,6 +70,8 @@ export const api = {
   login: (data: { email: string; password: string }) =>
     req<{ token: string; user: User }>("POST", "/auth/login", data),
   me: () => req<User>("GET", "/auth/me"),
+  updateMe: (data: { display_name?: string; avatar_url?: string }) =>
+    req<User>("PATCH", "/auth/me", data),
   deleteMe: () => req("DELETE", "/auth/me"),
 
   listRecipes: (q?: string, category?: string) => {
@@ -124,7 +126,7 @@ export const api = {
   substitute: (ingredient: string, recipe_id?: string) =>
     req<{ substitutes: { name: string; note: string }[] }>("POST", "/ai/substitute", { ingredient, recipe_id }),
 
-  setPrefs: (prefs: { diet: string[]; liked_ingredients: string[]; disliked: string[]; onboarded: boolean }) =>
+  setPrefs: (prefs: { diet: string[]; cuisines?: string[]; liked_ingredients: string[]; disliked: string[]; skill_level?: string; onboarded: boolean }) =>
     req<User>("PUT", "/me/preferences", prefs),
 
   mealPlan: () => req<{ plan: any; recipe: Recipe }[]>("GET", "/me/meal-plan"),

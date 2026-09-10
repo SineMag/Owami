@@ -163,7 +163,8 @@ export default function CookistMode() {
               ref={chatRef}
               testID="cookist-chat"
               style={styles.chat}
-              contentContainerStyle={{ paddingVertical: spacing.sm, gap: 6 }}
+              contentContainerStyle={{ paddingVertical: spacing.sm, gap: 8 }}
+              nestedScrollEnabled
               onContentSizeChange={() => chatRef.current?.scrollToEnd({ animated: true })}
             >
               {messages.map((m, i) => (
@@ -252,7 +253,7 @@ const styles = StyleSheet.create({
   askSend: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
   mic: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.brandSecondary, alignItems: "center", justifyContent: "center" },
   voiceHint: { color: "#CDBCA7", fontSize: 11, marginTop: 4 },
-  chat: { maxHeight: 220, marginVertical: 8 },
+  chat: { maxHeight: 420, minHeight: 120, marginVertical: 8 },
   bubble: { flexDirection: "row", alignItems: "flex-start", gap: 6, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14, maxWidth: "85%" },
   bubbleUser: { alignSelf: "flex-end", backgroundColor: colors.brandPrimary },
   bubbleUserT: { color: colors.onBrandPrimary, fontSize: 14, fontWeight: "500" },

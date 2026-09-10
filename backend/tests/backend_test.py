@@ -73,6 +73,77 @@ class TestAuth:
         assert d.status_code == 200
 
 
+class TestUpdateMe:
+    """PATCH /api/auth/me: display_name, avatar_url, owner_name sync."""
+
+    def test_update_display_name_and_owner_name_sync(self, free_token):
+        # get current name to restore later
+        me = requests.get(f"{API}/auth/me", headers=_h(free_token), timeout=15).json()
+        original = me["display_name"]
+        try:
+            new_name = "Chef Ada"
+            r = requests.patch(f"{API}/auth/me", headers=_h(free_token),
+                               json={"display_name": new_name}, timeout=15)
+            assert r.status_code == 200, f"patch failed: {r.status_code} {r.text}"
+            assert r.json()["display_name"] == new_name
+
+            # verify via GET
+            g = requests.get(f"{API}/auth/me", headers=_h(free_token), timeout=15)
+            assert g.json()["display_name"] == new_name
+
+            # verify owner_name propagation on user's recipes (create a recipe to test)
+            create = requests.post(f"{API}/recipes", headers=_h(free_token), json={
+                "title": "TEST_OwnerSync", "description": "d", "image_url": "",
+                "prep_time": 1, "cook_time": 1, "servings": 1, "difficulty": "Easy", "category": "Dinner",
+                "ingredients": [{"name": "salt", "quantity": "1", "unit": "tsp"}],
+                "instructions": ["s1"], "tags": []
+            }, timeout=15)
+            assert create.status_code == 200
+            rid = create.json()["id"]
+
+            # rename again to trigger sync
+            new_name2 = "Chef Ada Two"
+            r2 = requests.patch(f"{API}/auth/me", headers=_h(free_token),
+                                json={"display_name": new_name2}, timeout=15)
+            assert r2.status_code == 200
+
+            # check recipe owner_name updated
+            rec = requests.get(f"{API}/recipes/{rid}", timeout=15).json()
+            assert rec.get("owner_name") == new_name2, f"owner_name not synced: {rec.get('owner_name')}"
+
+            # cleanup created recipe
+            requests.delete(f"{API}/recipes/{rid}", headers=_h(free_token), timeout=15)
+        finally:
+            # restore original display_name
+            requests.patch(f"{API}/auth/me", headers=_h(free_token),
+                           json={"display_name": original}, timeout=15)
+
+    def test_update_empty_display_name_400(self, free_token):
+        r = requests.patch(f"{API}/auth/me", headers=_h(free_token),
+                           json={"display_name": "   "}, timeout=15)
+        assert r.status_code == 400
+        assert "empty" in r.text.lower() or "name" in r.text.lower()
+
+    def test_update_only_avatar_url(self, free_token):
+        me = requests.get(f"{API}/auth/me", headers=_h(free_token), timeout=15).json()
+        original_avatar = me.get("avatar_url") or ""
+        try:
+            avatar = "/api/uploads/test_avatar.jpg"
+            r = requests.patch(f"{API}/auth/me", headers=_h(free_token),
+                               json={"avatar_url": avatar}, timeout=15)
+            assert r.status_code == 200
+            assert r.json().get("avatar_url") == avatar
+            # display_name should NOT be affected
+            assert r.json()["display_name"] == me["display_name"]
+        finally:
+            requests.patch(f"{API}/auth/me", headers=_h(free_token),
+                           json={"avatar_url": original_avatar}, timeout=15)
+
+    def test_update_requires_auth(self):
+        r = requests.patch(f"{API}/auth/me", json={"display_name": "x"}, timeout=15)
+        assert r.status_code in (401, 403)
+
+
 # ----- recipes / likes / saves / history -----
 class TestRecipes:
     def test_list_recipes(self):
@@ -148,6 +219,79 @@ class TestPrefs:
                          json={"diet": ["vegetarian"], "liked_ingredients": ["basil"],
                                "disliked": ["cilantro"], "onboarded": True}, timeout=15)
         assert r.status_code == 200
+
+    def test_set_prefs_with_cuisines_and_skill_level(self):
+        """New this iteration: PrefsIn accepts cuisines + skill_level."""
+        email = f"test_prefs_{int(time.time())}@owami.app"
+        r = requests.post(f"{API}/auth/register",
+                          json={"email": email, "password": "owami123", "display_name": "P"}, timeout=15)
+        assert r.status_code == 200
+        tok = r.json()["token"]
+        try:
+            payload = {
+                "diet": ["Vegetarian"],
+                "cuisines": ["Italian", "Thai"],
+                "liked_ingredients": ["Pasta"],
+                "disliked": ["peanuts", "cilantro"],
+                "skill_level": "intermediate",
+                "onboarded": True,
+            }
+            r = requests.put(f"{API}/me/preferences", headers=_h(tok), json=payload, timeout=15)
+            assert r.status_code == 200, f"prefs set failed: {r.status_code} {r.text}"
+            body = r.json()
+            prefs = body["preferences"]
+            assert prefs["diet"] == ["Vegetarian"]
+            assert prefs["cuisines"] == ["Italian", "Thai"]
+            assert prefs["liked_ingredients"] == ["Pasta"]
+            assert prefs["disliked"] == ["peanuts", "cilantro"]
+            assert prefs["skill_level"] == "intermediate"
+            assert prefs["onboarded"] is True
+
+            # GET /auth/me should reflect the same
+            me = requests.get(f"{API}/auth/me", headers=_h(tok), timeout=15).json()
+            mp = me["preferences"]
+            assert mp["cuisines"] == ["Italian", "Thai"]
+            assert mp["skill_level"] == "intermediate"
+            assert mp["onboarded"] is True
+        finally:
+            requests.delete(f"{API}/auth/me", headers=_h(tok), timeout=15)
+
+    def test_set_prefs_defaults_empty_arrays_and_none(self):
+        """Skip-all path: empty prefs should default cleanly."""
+        email = f"test_prefs_skip_{int(time.time())}@owami.app"
+        r = requests.post(f"{API}/auth/register",
+                          json={"email": email, "password": "owami123", "display_name": "S"}, timeout=15)
+        assert r.status_code == 200
+        tok = r.json()["token"]
+        try:
+            # send only onboarded=true, everything else defaulted
+            r = requests.put(f"{API}/me/preferences", headers=_h(tok),
+                             json={"onboarded": True}, timeout=15)
+            assert r.status_code == 200
+            prefs = r.json()["preferences"]
+            assert prefs["diet"] == []
+            assert prefs["cuisines"] == []
+            assert prefs["liked_ingredients"] == []
+            assert prefs["disliked"] == []
+            assert prefs["skill_level"] is None
+            assert prefs["onboarded"] is True
+        finally:
+            requests.delete(f"{API}/auth/me", headers=_h(tok), timeout=15)
+
+    def test_register_new_user_not_onboarded(self):
+        """Fresh users must have onboarded flag NOT set (or false) so index.tsx redirects to /onboarding."""
+        email = f"test_ob_{int(time.time())}@owami.app"
+        r = requests.post(f"{API}/auth/register",
+                          json={"email": email, "password": "owami123", "display_name": "N"}, timeout=15)
+        assert r.status_code == 200
+        tok = r.json()["token"]
+        try:
+            me = requests.get(f"{API}/auth/me", headers=_h(tok), timeout=15).json()
+            # onboarded must be falsy so frontend routes to /onboarding
+            assert not me.get("preferences", {}).get("onboarded"), \
+                f"fresh user should not be onboarded: {me.get('preferences')}"
+        finally:
+            requests.delete(f"{API}/auth/me", headers=_h(tok), timeout=15)
 
 
 # ----- AI (premium gating + save-generated bug) -----

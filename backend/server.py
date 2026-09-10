@@ -122,6 +122,10 @@ class LoginIn(BaseModel):
     email: EmailStr
     password: str
 
+class ProfileUpdateIn(BaseModel):
+    display_name: Optional[str] = None
+    avatar_url: Optional[str] = None
+
 class Ingredient(BaseModel):
     name: str
     quantity: str = ""
@@ -184,8 +188,10 @@ class SubIn(BaseModel):
 
 class PrefsIn(BaseModel):
     diet: List[str] = []
+    cuisines: List[str] = []
     liked_ingredients: List[str] = []
     disliked: List[str] = []
+    skill_level: Optional[str] = None
     onboarded: bool = True
 
 class MealPlanIn(BaseModel):
@@ -224,6 +230,23 @@ async def login(body: LoginIn):
 @api.get("/auth/me")
 async def me(user=Depends(get_user)):
     return user
+
+@api.patch("/auth/me")
+async def update_me(body: ProfileUpdateIn, user=Depends(get_user)):
+    updates: Dict[str, Any] = {}
+    if body.display_name is not None:
+        name = body.display_name.strip()
+        if not name:
+            raise HTTPException(400, "Name can't be empty")
+        updates["display_name"] = name
+    if body.avatar_url is not None:
+        updates["avatar_url"] = body.avatar_url
+    if updates:
+        await db.users.update_one({"id": user["id"]}, {"$set": updates})
+        # keep owner_name on recipes in sync when the display name changes
+        if "display_name" in updates:
+            await db.recipes.update_many({"owner_id": user["id"]}, {"$set": {"owner_name": updates["display_name"]}})
+    return await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0})
 
 @api.delete("/auth/me")
 async def delete_me(user=Depends(get_user)):

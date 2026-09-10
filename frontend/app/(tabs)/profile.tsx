@@ -2,10 +2,11 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
+import { Image } from "expo-image";
 import MDIcon from "@react-native-vector-icons/material-design-icons";
 import { colors, radii, spacing } from "@/src/theme";
 import { useAuth } from "@/src/hooks/useAuth";
-import { api } from "@/src/api/client";
+import { api, fileUrl } from "@/src/api/client";
 
 export default function Profile() {
   const insets = useSafeAreaInsets();
@@ -27,7 +28,18 @@ export default function Profile() {
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingHorizontal: spacing.xl, paddingBottom: 120 }}>
       <View style={styles.headRow}>
-        <View style={styles.avatar}><Text style={{ color: colors.onBrandSecondary, fontSize: 26, fontWeight: "700" }}>{user?.display_name?.[0]?.toUpperCase() || "O"}</Text></View>
+        <Pressable testID="profile-edit-avatar" onPress={() => router.push("/profile/edit")}>
+          {user?.avatar_url ? (
+            <Image source={{ uri: fileUrl(user.avatar_url) }} style={styles.avatar} contentFit="cover" />
+          ) : (
+            <View style={styles.avatar}>
+              <Text style={{ color: colors.onBrandSecondary, fontSize: 26, fontWeight: "700" }}>{user?.display_name?.[0]?.toUpperCase() || "O"}</Text>
+            </View>
+          )}
+          <View style={styles.avatarEditBadge}>
+            <MDIcon name="pencil" size={12} color={colors.onBrandPrimary} />
+          </View>
+        </Pressable>
         <View style={{ flex: 1 }}>
           <Text style={styles.name}>{user?.display_name}</Text>
           <Text style={styles.email}>{user?.email}</Text>
@@ -39,6 +51,9 @@ export default function Profile() {
             </Pressable>
           )}
         </View>
+        <Pressable testID="profile-edit-button" onPress={() => router.push("/profile/edit")} hitSlop={10} style={styles.editIconBtn}>
+          <MDIcon name="cog-outline" size={22} color={colors.onSurface} />
+        </Pressable>
       </View>
 
       <View style={styles.stats}>
@@ -61,6 +76,7 @@ export default function Profile() {
       <Row testID="row-restore" icon="restore" title="Restore purchases" onPress={onRestore} />
 
       <Text style={styles.section}>Account</Text>
+      <Row testID="row-edit" icon="account-edit-outline" title="Edit profile" onPress={() => router.push("/profile/edit")} />
       <Row testID="row-signout" icon="logout" title="Sign out" onPress={async () => { await signOut(); router.replace("/auth/welcome"); }} />
       <Row testID="row-delete" icon="trash-can-outline" title="Delete account" danger onPress={onDelete} />
 
@@ -93,6 +109,8 @@ function Row({ icon, title, sub, onPress, danger, testID }: any) {
 const styles = StyleSheet.create({
   headRow: { flexDirection: "row", gap: spacing.md, alignItems: "center", marginBottom: spacing.xl },
   avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.brandSecondary, alignItems: "center", justifyContent: "center" },
+  avatarEditBadge: { position: "absolute", right: -2, bottom: -2, width: 24, height: 24, borderRadius: 12, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.surface },
+  editIconBtn: { padding: 6 },
   name: { fontSize: 22, color: colors.onSurface, fontWeight: "700" },
   email: { color: colors.muted, marginTop: 2 },
   plusBadgeBig: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start", backgroundColor: colors.brandPrimary, paddingHorizontal: 10, paddingVertical: 4, borderRadius: radii.pill, marginTop: 6 },
