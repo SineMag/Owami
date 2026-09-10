@@ -1,0 +1,164 @@
+{
+  "app_name": "Owami",
+  "personality": "3 Editorial Mobile LIGHT with tactile Autumn accents",
+  "personality_one_liner": "A warm, personal digital cookbook that feels like a beautifully lit autumnal kitchen, designed for hands-free culinary focus.",
+  "color": {
+    "surface": "#FDFBF7",
+    "onSurface": "#2D1E19",
+    "surfaceSecondary": "#F4EDE4",
+    "onSurfaceSecondary": "#2D1E19",
+    "surfaceTertiary": "#E8DFD5",
+    "onSurfaceTertiary": "#2D1E19",
+    "surfaceInverse": "#3E2723",
+    "onSurfaceInverse": "#FDFBF7",
+    "brand": "#D85A38",
+    "brandPrimary": "#C04A2C",
+    "onBrandPrimary": "#FDFBF7",
+    "brandSecondary": "#DE8F42",
+    "onBrandSecondary": "#2D1E19",
+    "brandTertiary": "#657153",
+    "onBrandTertiary": "#FDFBF7",
+    "success": "#657153",
+    "onSuccess": "#FDFBF7",
+    "warning": "#DE8F42",
+    "onWarning": "#2D1E19",
+    "error": "#A43B2A",
+    "onError": "#FDFBF7",
+    "border": "#E8DFD5",
+    "borderStrong": "#CDBCA7",
+    "divider": "#E8DFD5",
+    "muted": "#7D6B5D"
+  },
+  "typography": {
+    "displayFontFamily": "Fraunces",
+    "textFontFamily": "DM Sans",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24,
+      "3xl": 48
+    }
+  },
+  "spacing": {
+    "rule": "Generous, editorial whitespace. Let the typography and food photography breathe. Use tight spacing inside metadata clusters, but large spacing between sections.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": 0,
+  "navigation": "bottom_tabs",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Use glass on the bottom tab bar to let recipe images glide underneath.",
+      "Use glass on the sticky 'Start Cooking' CTA container.",
+      "Use subtle glass over dark gradient scrims for hero card titles."
+    ],
+    "dont's": [
+      "Do not use glass heavily on dense ingredient lists.",
+      "Avoid glass in Cookist Mode to ensure maximum high-contrast readability from a distance."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Home",
+      "purpose": "A personalized culinary dashboard that invites users to start cooking or discover new ideas.",
+      "states": {
+        "loading": "Centered spinner using brandPrimary terracotta.",
+        "empty": "Illustration of an empty wooden cutting board, 'Your kitchen is waiting', primary CTA 'Find a recipe'.",
+        "error": "Message 'Couldn't load your kitchen', Retry button."
+      },
+      "layout": "Header: 'Good morning, Cookist' (Fraunces serif) + Profile avatar. Main Action: Large 'What's cooking today?' card with warm golden/terracotta gradient. Sections (Horizontal scrolling): 'Recommended for you' (Image cards), 'What's in my kitchen?' (AI generator entry point), 'Recent recipes'. Generous xl vertical spacing between sections."
+    },
+    {
+      "name": "Recipe Detail",
+      "purpose": "Showcase the recipe beautifully with progressive disclosure before committing to cook.",
+      "states": {
+        "loading": "Skeleton loaders for image and text rows.",
+        "empty": "N/A - Data driven.",
+        "error": "Error loading recipe, Retry CTA."
+      },
+      "layout": "Full-bleed hero image at the top with a top-to-bottom gradient scrim (transparent to surfaceInverse 70%). Recipe title (Fraunces 2xl) sits on the image. Below image (surface): Prep/Cook/Serves metadata in a clean row. Clean ingredients list with border bottom dividers. Sticky bottom container (glass or solid surface) with a large 'Start Cooking' (Cookist Mode) CTA."
+    },
+    {
+      "name": "Cookist Mode (Active Cooking)",
+      "purpose": "A hands-free, high-contrast, distraction-free voice cooking assistant usable from a distance.",
+      "states": {
+        "loading": "Preparing your kitchen...",
+        "empty": "N/A",
+        "error": "Voice assistant disconnected, Retry connection."
+      },
+      "layout": "Dark theme override for high contrast (surfaceInverse #3E2723 background). Single-step focus. Huge step typography (DM Sans 3xl, onSurfaceInverse text). Voice listening indicator (subtle glowing animation in brandSecondary). Giant tap targets for 'Next'/'Back' as fallback to voice. Inline timer chip."
+    },
+    {
+      "name": "What's in my kitchen? (AI Generator)",
+      "purpose": "Allow users to input ingredients and get personalized recipe recommendations.",
+      "states": {
+        "loading": "Lottie of a bubbling pot or animated 'Thinking...' with culinary puns.",
+        "empty": "Enter up to 5 ingredients to get started.",
+        "error": "Couldn't generate recipes right now."
+      },
+      "layout": "Search/input bar at top. Tag cloud of suggested ingredients (brandTertiary chips). Generate button pinned to bottom."
+    },
+    {
+      "name": "Owami+ Paywall",
+      "purpose": "A premium, beautiful native paywall to upgrade to Owami+.",
+      "states": {
+        "loading": "Spinner.",
+        "empty": "N/A",
+        "error": "Failed to load plans."
+      },
+      "layout": "Cinematic full-screen image background (Autumn rustic kitchen) with 80% surfaceInverse gradient scrim. Premium typography (Fraunces). Feature list with Phosphor checkmarks. Large 'Upgrade to Owami+' CTA."
+    }
+  ],
+  "images": {
+    "hero_autumn_kitchen": {
+      "url": "https://images.unsplash.com/photo-1761662826410-3218852da3bf?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzZ8MHwxfHNlYXJjaHwxfHxhdXR1bW4lMjBydXN0aWMlMjBraXRjaGVuJTIwYWVzdGhldGljfGVufDB8fHx8MTc4OTAyNDczMXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Rustic kitchen with checkered tablecloth and brick walls"
+    },
+    "recipe_pumpkin_soup": {
+      "url": "https://images.unsplash.com/photo-1695459003933-4a1b59009355?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzV8MHwxfHNlYXJjaHwxfHxhdXR1bW4lMjBzb3VwJTIwd2FybSUyMGxpZ2h0aW5nfGVufDB8fHx8MTc4OTAyNDczMXww&ixlib=rb-4.1.0&q=85",
+      "alt": "A bowl of warm autumn soup with pumpkins"
+    },
+    "ai_generator_cutting_board": {
+      "url": "https://images.unsplash.com/photo-1766596737206-214abffe65bf?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTJ8MHwxfHNlYXJjaHwzfHx3b29kZW4lMjBjdXR0aW5nJTIwYm9hcmQlMjBmcmVzaCUyMGluZ3JlZGllbnRzfGVufDB8fHx8MTc4OTAyNDczMXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Fresh ingredients for cooking on a kitchen counter"
+    },
+    "paywall_background": {
+      "url": "https://images.unsplash.com/photo-1770926005888-1503cab85fcd?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzZ8MHwxfHNlYXJjaHw0fHxhdXR1bW4lMjBydXN0aWMlMjBraXRjaGVuJTIwYWVzdGhldGljfGVufDB8fHx8MTc4OTAyNDczMXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Sunlight streams across a tiled kitchen wall"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Strictly follow the color palette. No blues, purples, or generic greens. The palette is built around warm autumn tones: Espresso, Terracotta, Cream, Chestnut.",
+    "Use Fraunces (serif) for headings and recipe titles, and DM Sans (sans-serif) for body text and metadata. Cap font weights at 500.",
+    "Implement the gradient scrim pattern for ALL images that have text overlaid on them (e.g., Recipe Detail hero images).",
+    "For the 'Cookist Mode', create a distinct high-contrast experience using the 'surfaceInverse' (#3E2723) background. The UI here should feature massively upscaled typography (3xl) and oversized touch targets to ensure it is usable hands-free from a distance.",
+    "Apply 'expo-blur' glassmorphism safely over the bottom tab bar and sticky 'Start Cooking' CTAs to achieve the premium 'modern cookbook' feel, gracefully degrading on low-end Androids."
+  ]
+}
