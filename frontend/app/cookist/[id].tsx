@@ -20,11 +20,12 @@ export default function CookistMode() {
   const [running, setRunning] = useState(false);
   const [ask, setAsk] = useState("");
   const [asking, setAsking] = useState(false);
-  const [answer, setAnswer] = useState<string | null>(null);
+  const [messages, setMessages] = useState<{ role: "user" | "owami"; text: string; timerDone?: boolean }[]>([]);
   const [listening, setListening] = useState(false);
   const [voiceOn, setVoiceOn] = useState(true);
   const stopListenRef = useRef<() => void>(() => {});
   const timerRef = useRef<any>(null);
+  const chatRef = useRef<any>(null);
 
   useEffect(() => {
     if (running && timerSec > 0) {
@@ -33,7 +34,9 @@ export default function CookistMode() {
           clearInterval(timerRef.current);
           setRunning(false);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-          setAnswer("Timer done! Come back to the kitchen.");
+          const done = "Timer done! Come back to the kitchen.";
+          setMessages(m => [...m, { role: "owami", text: done, timerDone: true }]);
+          if (voiceOn) speak(done);
           return 0;
         }
         return s - 1;
@@ -61,7 +64,9 @@ export default function CookistMode() {
   const handleVoiceCommand = async (raw: string) => {
     const q = raw.trim();
     if (!q) return;
-    setAsking(true); setAnswer(null);
+    setMessages(m => [...m, { role: "user", text: q }]);
+    setAsk("");
+    setAsking(true);
     try {
       const m = q.toLowerCase().match(/(\d+)\s*(minute|min|m)/);
       let reply = "";
@@ -72,11 +77,11 @@ export default function CookistMode() {
       else if (/resume/i.test(q)) { setRunning(true); reply = "Resuming."; }
       else if (/timer/i.test(q) && m) { const mins = parseInt(m[1]); setTimerSec(mins * 60); setRunning(true); reply = `Timer set for ${mins} minutes.`; }
       else { const res = await api.ask(q, id, step); reply = res.answer; }
-      setAnswer(reply);
+      setMessages(mm => [...mm, { role: "owami", text: reply }]);
       if (voiceOn && reply) speak(reply);
-      setAsk("");
-    } catch { setAnswer("I didn't catch that. Try again."); }
-    finally { setAsking(false); }
+    } catch {
+      setMessages(mm => [...mm, { role: "owami", text: "I didn't catch that. Try again." }]);
+    } finally { setAsking(false); }
   };
 
   const askOwami = () => handleVoiceCommand(ask);
@@ -84,15 +89,15 @@ export default function CookistMode() {
   const toggleMic = () => {
     if (listening) { stopListenRef.current?.(); setListening(false); return; }
     if (!isVoiceSupported()) {
-      setAnswer(Platform.OS === "web"
+      setMessages(m => [...m, { role: "owami", text: Platform.OS === "web"
         ? "Voice input isn't supported in this browser. Try Chrome, or use the text box."
-        : "On-device voice needs the Android build. Use the text box in preview.");
+        : "On-device voice needs the Android build. Use the text box in preview." }]);
       return;
     }
-    setListening(true); setAnswer("Listening…"); stopSpeaking();
+    setListening(true); stopSpeaking();
     stopListenRef.current = startListening({
-      onResult: (t) => { setListening(false); setAsk(t); handleVoiceCommand(t); },
-      onError: () => { setListening(false); setAnswer("I didn't catch that. Try again."); },
+      onResult: (t) => { setListening(false); handleVoiceCommand(t); },
+      onError: () => { setListening(false); setMessages(m => [...m, { role: "owami", text: "I didn't catch that. Try again." }]); },
     });
   };
 
@@ -134,7 +139,7 @@ export default function CookistMode() {
 
         <View style={styles.controls}>
           <Ctrl testID="cookist-prev" icon="skip-previous" label="Back" onPress={goPrev} disabled={step === 0} />
-          <Ctrl testID="cookist-repeat" icon="refresh" label="Repeat" onPress={() => setAnswer(current)} />
+          <Ctrl testID="cookist-repeat" icon="refresh" label="Repeat" onPress={() => { setMessages(m => [...m, { role: "owami", text: current }]); if (voiceOn) speak(current); }} />
           <CtrlPrimary testID="cookist-next" icon={step === total - 1 ? "check-bold" : "skip-next"} label={step === total - 1 ? "Done" : "Next"} onPress={goNext} />
         </View>
 
@@ -144,7 +149,39 @@ export default function CookistMode() {
         </Pressable>
 
         <View style={styles.askWrap}>
-          <Text style={styles.askKicker}>Ask Owami</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <Text style={styles.askKicker}>Ask Owami</Text>
+            {messages.length > 0 && (
+              <Pressable testID="cookist-clear-chat" onPress={() => setMessages([])} hitSlop={8}>
+                <Text style={{ color: "#CDBCA7", fontSize: 11 }}>Clear</Text>
+              </Pressable>
+            )}
+          </View>
+
+          {messages.length > 0 && (
+            <ScrollView
+              ref={chatRef}
+              testID="cookist-chat"
+              style={styles.chat}
+              contentContainerStyle={{ paddingVertical: spacing.sm, gap: 6 }}
+              onContentSizeChange={() => chatRef.current?.scrollToEnd({ animated: true })}
+            >
+              {messages.map((m, i) => (
+                <View key={i} testID={`cookist-msg-${m.role}-${i}`}
+                  style={[styles.bubble, m.role === "user" ? styles.bubbleUser : styles.bubbleOwami]}>
+                  {m.role === "owami" && <MDIcon name={m.timerDone ? "timer-check" : "chef-hat"} size={14} color={colors.brandSecondary} />}
+                  <Text style={m.role === "user" ? styles.bubbleUserT : styles.bubbleOwamiT}>{m.text}</Text>
+                </View>
+              ))}
+              {asking && (
+                <View style={[styles.bubble, styles.bubbleOwami]}>
+                  <ActivityIndicator color={colors.brandSecondary} />
+                  <Text style={styles.bubbleOwamiT}>Thinking…</Text>
+                </View>
+              )}
+            </ScrollView>
+          )}
+
           <View style={styles.askRow}>
             <Pressable
               testID="cookist-mic"
@@ -155,7 +192,7 @@ export default function CookistMode() {
             </Pressable>
             <TextInput
               testID="cookist-ask-input"
-              placeholder={isVoiceSupported() ? "Tap the mic or type…" : "How much salt? Set timer for 8 min…"}
+              placeholder={listening ? "Listening…" : isVoiceSupported() ? "Tap the mic or type…" : "How much salt? Set timer for 8 min…"}
               placeholderTextColor="#CDBCA7"
               value={ask}
               onChangeText={setAsk}
@@ -168,12 +205,6 @@ export default function CookistMode() {
           </View>
           {!isVoiceSupported() && Platform.OS !== "web" && (
             <Text style={styles.voiceHint}>Full hands-free voice unlocks in the Android build.</Text>
-          )}
-          {answer && (
-            <View style={styles.answerBox}>
-              <MDIcon name="chef-hat" size={16} color={colors.brandSecondary} />
-              <Text testID="cookist-answer-text" style={styles.answerT}>{answer}</Text>
-            </View>
           )}
         </View>
       </ScrollView>
@@ -221,6 +252,12 @@ const styles = StyleSheet.create({
   askSend: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
   mic: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.brandSecondary, alignItems: "center", justifyContent: "center" },
   voiceHint: { color: "#CDBCA7", fontSize: 11, marginTop: 4 },
+  chat: { maxHeight: 220, marginVertical: 8 },
+  bubble: { flexDirection: "row", alignItems: "flex-start", gap: 6, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14, maxWidth: "85%" },
+  bubbleUser: { alignSelf: "flex-end", backgroundColor: colors.brandPrimary },
+  bubbleUserT: { color: colors.onBrandPrimary, fontSize: 14, fontWeight: "500" },
+  bubbleOwami: { alignSelf: "flex-start", backgroundColor: "rgba(222,143,66,0.15)" },
+  bubbleOwamiT: { color: colors.onSurfaceInverse, fontSize: 14, flexShrink: 1 },
   answerBox: { flexDirection: "row", gap: 8, backgroundColor: "rgba(222,143,66,0.1)", padding: spacing.md, borderRadius: radii.md },
   answerT: { flex: 1, color: colors.onSurfaceInverse, fontSize: 15, lineHeight: 22 },
 });

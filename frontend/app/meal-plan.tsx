@@ -85,13 +85,24 @@ export default function MealPlan() {
                   <View style={styles.slotDot} />
                   <Text style={styles.slotLabel}>{slot[0].toUpperCase() + slot.slice(1)}</Text>
                   {item ? (
-                    <Pressable testID={`mealplan-item-${d.iso}-${slot}`} onPress={() => router.push(`/recipe/${item.recipe.id}`)} style={styles.slotCard}>
-                      <Image source={{ uri: fileUrl(item.recipe.image_url) }} style={styles.slotThumb} contentFit="cover" />
-                      <Text style={styles.slotTitle} numberOfLines={1}>{item.recipe.title}</Text>
+                    <View style={styles.slotCard}>
+                      <Pressable testID={`mealplan-item-${d.iso}-${slot}`} onPress={() => router.push(`/recipe/${item.recipe.id}`)} style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10 }}>
+                        <Image source={{ uri: fileUrl(item.recipe.image_url) }} style={styles.slotThumb} contentFit="cover" />
+                        <Text style={styles.slotTitle} numberOfLines={1}>{item.recipe.title}</Text>
+                      </Pressable>
+                      <Pressable
+                        testID={`mealplan-cook-${d.iso}-${slot}`}
+                        onPress={async () => { await api.recordHistory(item.recipe.id, "started"); router.push(`/cookist/${item.recipe.id}`); }}
+                        hitSlop={8}
+                        style={styles.cookBtn}
+                      >
+                        <MDIcon name="chef-hat" size={16} color={colors.onBrandPrimary} />
+                        <Text style={styles.cookBtnT}>Cook</Text>
+                      </Pressable>
                       <Pressable testID={`mealplan-remove-${d.iso}-${slot}`} onPress={() => remove(item.plan.id)} hitSlop={10} style={{ padding: 4 }}>
                         <MDIcon name="close-circle" size={20} color={colors.muted} />
                       </Pressable>
-                    </Pressable>
+                    </View>
                   ) : (
                     <Pressable testID={`mealplan-add-${d.iso}-${slot}`} onPress={() => setPicker({ date: d.iso, slot })} style={styles.slotEmpty}>
                       <MDIcon name="plus" size={18} color={colors.brandPrimary} />
@@ -142,7 +153,9 @@ const styles = StyleSheet.create({
   slotRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 8 },
   slotDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.brandPrimary },
   slotLabel: { color: colors.muted, fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, width: 70 },
-  slotCard: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.surface, borderRadius: radii.md, padding: 8, borderWidth: 1, borderColor: colors.border },
+  slotCard: { flex: 1, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.surface, borderRadius: radii.md, padding: 8, borderWidth: 1, borderColor: colors.border },
+  cookBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.brandPrimary, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radii.pill },
+  cookBtnT: { color: colors.onBrandPrimary, fontWeight: "700", fontSize: 11 },
   slotThumb: { width: 40, height: 40, borderRadius: radii.sm, backgroundColor: colors.surfaceTertiary },
   slotTitle: { flex: 1, color: colors.onSurface, fontWeight: "600", fontSize: 14 },
   slotEmpty: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderStyle: "dashed", borderWidth: 1.5, borderColor: colors.border, borderRadius: radii.md, paddingVertical: 12 },

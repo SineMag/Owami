@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
@@ -7,21 +7,40 @@ import { LinearGradient } from "expo-linear-gradient";
 import MDIcon from "@react-native-vector-icons/material-design-icons";
 import { useState } from "react";
 import { api, fileUrl } from "@/src/api/client";
+import { useAuth } from "@/src/hooks/useAuth";
 import { colors, radii, spacing } from "@/src/theme";
+
+const BASE = process.env.EXPO_PUBLIC_BACKEND_URL || "";
 
 export default function RecipeDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
+  const { user } = useAuth();
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
   const { data: r, isLoading } = useQuery({ queryKey: ["recipe", id], queryFn: () => api.getRecipe(id!), enabled: !!id });
 
-  const onLike = async () => { const res = await api.likeToggle(id!); setLiked(res.liked); qc.invalidateQueries({ queryKey: ["likes"] }); };
-  const onSave = async () => { const res = await api.saveToggle(id!); setSaved(res.saved); qc.invalidateQueries({ queryKey: ["saves"] }); };
-  const onShare = async () => { if (r) await Share.share({ message: `Cook "${r.title}" with me on Owami — ${r.description}` }); };
-  const onStart = async () => { await api.recordHistory(id!, "started"); router.push(`/cookist/${id}`); };
+  const requireAuth = () => { if (!user) { router.push("/auth/welcome"); return false; } return true; };
+  const onLike = async () => { if (!requireAuth()) return; const res = await api.likeToggle(id!); setLiked(res.liked); qc.invalidateQueries({ queryKey: ["likes"] }); };
+  const onSave = async () => { if (!requireAuth()) return; const res = await api.saveToggle(id!); setSaved(res.saved); qc.invalidateQueries({ queryKey: ["saves"] }); };
+  const onShare = async () => {
+    if (!r) return;
+    const url = `${BASE}/recipe/${id}`;
+    const message = `Cook "${r.title}" with me on Owami — ${r.description}\n\n${url}`;
+    if (Platform.OS === "web") {
+      try {
+        // @ts-ignore
+        if ((navigator as any).share) { await (navigator as any).share({ title: r.title, text: r.description, url }); return; }
+      } catch {}
+      try { await (navigator as any).clipboard?.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch {}
+      return;
+    }
+    await Share.share({ message, url } as any);
+  };
+  const onStart = async () => { if (!requireAuth()) return; await api.recordHistory(id!, "started"); router.push(`/cookist/${id}`); };
 
   if (isLoading || !r) return <View style={{ flex: 1, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}><ActivityIndicator color={colors.brandPrimary} /></View>;
 
@@ -75,10 +94,16 @@ export default function RecipeDetail() {
 
       <View style={[styles.ctaBar, { paddingBottom: insets.bottom + spacing.md }]}>
         <Pressable testID="recipe-start-cooking" onPress={onStart} style={styles.startBtn}>
-          <MDIcon name="chef-hat" size={22} color={colors.onBrandPrimary} />
-          <Text style={styles.startText}>Start Cooking</Text>
+          <MDIcon name={user ? "chef-hat" : "login"} size={22} color={colors.onBrandPrimary} />
+          <Text style={styles.startText}>{user ? "Start Cooking" : "Sign in to cook"}</Text>
         </Pressable>
       </View>
+      {copied && (
+        <View testID="recipe-link-copied" style={[styles.toast, { bottom: insets.bottom + 110 }]}>
+          <MDIcon name="link-variant" size={16} color={colors.onSurfaceInverse} />
+          <Text style={styles.toastT}>Link copied — share it anywhere</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -114,4 +139,6 @@ const styles = StyleSheet.create({
   ctaBar: { position: "absolute", left: 0, right: 0, bottom: 0, padding: spacing.lg, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border },
   startBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: colors.brandPrimary, padding: 18, borderRadius: radii.lg },
   startText: { color: colors.onBrandPrimary, fontWeight: "700", fontSize: 17 },
+  toast: { position: "absolute", left: spacing.xl, right: spacing.xl, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.surfaceInverse, paddingVertical: 12, borderRadius: radii.pill },
+  toastT: { color: colors.onSurfaceInverse, fontWeight: "600", fontSize: 13 },
 });
