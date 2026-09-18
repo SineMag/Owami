@@ -44,14 +44,14 @@ export const themes: { light: ThemeColors; dark?: ThemeColors } = { light };
 export const colors = light;
 
 export function setColorScheme(scheme: ColorScheme | null) {
-  Appearance.setColorScheme?.(scheme);
+  Appearance.setColorScheme?.(scheme ?? defaultScheme);
 }
 setColorScheme?.(themes.dark ? null : defaultScheme);
 
 export function useTheme(): { scheme: ColorScheme; colors: ThemeColors } {
   const system = useColorScheme();
-  const scheme: ColorScheme = system && themes[system] ? system : defaultScheme;
-  return { scheme, colors: themes[scheme] ?? themes.light };
+  const scheme: ColorScheme = system === "dark" && themes.dark ? "dark" : defaultScheme;
+  return { scheme, colors: themes[scheme] };
 }
 
 export function makeStyles<T extends StyleSheet.NamedStyles<T> | StyleSheet.NamedStyles<any>>(

@@ -6,7 +6,7 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import MDIcon from "@react-native-vector-icons/material-design-icons";
 import { useAuth } from "@/src/hooks/useAuth";
-import { useSubscription, REVENUECAT_OFFERING_IDENTIFIER } from "@/src/lib/revenuecat";
+import { useSubscription } from "@/src/lib/revenuecat";
 import { ConfirmModal } from "@/src/components/confirm-modal";
 import { colors, radii, spacing } from "@/src/theme";
 
@@ -30,6 +30,9 @@ export default function Paywall() {
   const { currentOffering, isSubscribed, identityReady, isLoading, purchase, restore, isPurchasing, isRestoring } = useSubscription();
   const [confirmPkg, setConfirmPkg] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const packages = currentOffering?.availablePackages ?? [];
+  const selectedPkg = packages.find(p => p.identifier === selectedId) ?? packages[0] ?? null;
 
   // Prefer RevenueCat's hosted paywall on native — it uses whatever offering the customer designed.
   if (Platform.OS !== "web" && RevenueCatUI?.Paywall) {
@@ -46,10 +49,6 @@ export default function Paywall() {
   }
 
   // Web / preview: coded paywall driven by RevenueCat offerings.
-  const packages = currentOffering?.availablePackages ?? [];
-  const [selectedId, setSelectedId] = useState<string | null>(packages[0]?.identifier ?? null);
-  const selectedPkg = packages.find(p => p.identifier === selectedId) ?? packages[0] ?? null;
-
   const onPurchase = async () => {
     if (!selectedPkg) return;
     if (!identityReady) { setErr("Sign in first, then try again."); return; }
@@ -80,8 +79,8 @@ export default function Paywall() {
     <View style={{ flex: 1, backgroundColor: colors.surfaceInverse }}>
       <ScrollView contentContainerStyle={{ paddingBottom: 220 }}>
         <View style={{ height: 340 }}>
-          <Image source={{ uri: "https://images.unsplash.com/photo-1770926005888-1503cab85fcd?w=1200&q=80" }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
-          <LinearGradient colors={["rgba(45,30,25,0.3)", "rgba(45,30,25,0.75)", colors.surfaceInverse]} locations={[0, 0.5, 1]} style={StyleSheet.absoluteFillObject} />
+          <Image source={{ uri: "https://images.unsplash.com/photo-1770926005888-1503cab85fcd?w=1200&q=80" }} style={StyleSheet.absoluteFill} contentFit="cover" />
+          <LinearGradient colors={["rgba(45,30,25,0.3)", "rgba(45,30,25,0.75)", colors.surfaceInverse]} locations={[0, 0.5, 1]} style={StyleSheet.absoluteFill} />
           <Pressable testID="paywall-close" onPress={() => router.back()} style={[styles.close, { top: insets.top + spacing.sm }]}>
             <MDIcon name="close" size={22} color={colors.onSurfaceInverse} />
           </Pressable>

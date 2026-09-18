@@ -19,9 +19,13 @@ from fastapi.responses import Response
 from fastapi.concurrency import run_in_threadpool
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ASCENDING, DESCENDING, IndexModel
 from dotenv import load_dotenv
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone
+try:
+    from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone
+except ImportError:
+    LlmChat = UserMessage = TextDelta = StreamDone = None
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -467,7 +471,7 @@ async def get_file(full_path: str):
 
 # ---------------------------------------------------------------- AI
 async def _ask_llm(system: str, prompt: str) -> str:
-    if not EMERGENT_LLM_KEY:
+    if not EMERGENT_LLM_KEY or LlmChat is None:
         raise HTTPException(503, "AI unavailable")
     chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=str(uuid.uuid4()),
                     system_message=system).with_model("gemini", "gemini-3-flash-preview")
@@ -744,34 +748,64 @@ SEED_RECIPES = [
                        "Bake at 180°C for 40 minutes.","Serve with cream."]},
 ]
 
-async def seed():
-    # Users
-    for email, name, prem in [("cook@owami.app", "Cookist", False), ("premium@owami.app", "Chef Ama", True)]:
-        if not await db.users.find_one({"email": email}):
-            uid = str(uuid.uuid4())
-            await db.users.insert_one({
-                "id": uid, "email": email, "display_name": name,
-                "password_hash": hash_pw("owami123"), "avatar_url": "",
-                "is_premium": prem,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "preferences": {"diet": [], "liked_ingredients": [], "disliked": []},
-            })
-    # Recipes
-    count = await db.recipes.count_documents({})
-    if count == 0:
-        seed_user = await db.users.find_one({"email": "cook@owami.app"})
-        for r in SEED_RECIPES:
-            doc = {**r, "id": str(uuid.uuid4()),
-                    "owner_id": seed_user["id"], "owner_name": seed_user["display_name"],
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                    "likes_count": 0}
-            await db.recipes.insert_one(doc)
-        logger.info(f"Seeded {len(SEED_RECIPES)} recipes")
+async def remove_demo_data():
+    demo_emails = ["cook@owami.app", "premium@owami.app"]
+    demo_users = await db.users.find(
+        {"email": {"$in": demo_emails}}, {"_id": 0, "id": 1}
+    ).to_list(length=None)
+    demo_ids = [user["id"] for user in demo_users]
+    if demo_ids:
+        await db.recipes.delete_many({"owner_id": {"$in": demo_ids}})
+    result = await db.users.delete_many({"email": {"$in": demo_emails}})
+    if demo_ids or result.deleted_count:
+        logger.info("Removed demo users and their seeded recipes")
+
+async def initialize_database():
+    collections = {
+        "users": [
+            IndexModel([("id", ASCENDING)], unique=True),
+            IndexModel([("email", ASCENDING)], unique=True),
+        ],
+        "recipes": [
+            IndexModel([("id", ASCENDING)], unique=True),
+            IndexModel([("owner_id", ASCENDING)]),
+            IndexModel([("category", ASCENDING)]),
+            IndexModel([("likes_count", DESCENDING)]),
+            IndexModel([("tags", ASCENDING)]),
+        ],
+        "likes": [
+            IndexModel([("user_id", ASCENDING), ("recipe_id", ASCENDING)], unique=True),
+            IndexModel([("recipe_id", ASCENDING)]),
+        ],
+        "saves": [
+            IndexModel([("user_id", ASCENDING), ("recipe_id", ASCENDING)], unique=True),
+            IndexModel([("recipe_id", ASCENDING)]),
+        ],
+        "history": [
+            IndexModel([("user_id", ASCENDING), ("at", DESCENDING)]),
+            IndexModel([("recipe_id", ASCENDING)]),
+        ],
+        "uploads": [
+            IndexModel([("path", ASCENDING)], unique=True),
+            IndexModel([("owner_id", ASCENDING)]),
+        ],
+        "meal_plans": [
+            IndexModel([("id", ASCENDING)], unique=True),
+            IndexModel([("user_id", ASCENDING), ("date", ASCENDING), ("slot", ASCENDING)], unique=True),
+        ],
+    }
+    existing = set(await db.list_collection_names())
+    for name, indexes in collections.items():
+        if name not in existing:
+            await db.create_collection(name)
+        await db[name].create_indexes(indexes)
+    logger.info("MongoDB collections and indexes are ready")
 
 @app.on_event("startup")
 async def on_startup():
     try:
-        await seed()
+        await initialize_database()
+        await remove_demo_data()
     except Exception as e:
         logger.exception(f"seed failed: {e}")
     # storage init (non-blocking)

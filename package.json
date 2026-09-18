@@ -1,6 +1,11 @@
 {
   "dependencies": {
+    "expo": "^57.0.24",
     "react-native-purchases": "^10.9.0",
     "react-native-purchases-ui": "^10.9.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.4",
+    "typescript": "~6.0.3"
   }
 }

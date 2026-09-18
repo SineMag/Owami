@@ -48,8 +48,8 @@ export default function RecipeDetail() {
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
         <View style={{ height: 340 }}>
-          <Image source={{ uri: fileUrl(r.image_url) }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
-          <LinearGradient colors={["rgba(45,30,25,0.4)", "transparent", "rgba(45,30,25,0.8)"]} locations={[0, 0.4, 1]} style={StyleSheet.absoluteFillObject} />
+          <Image source={{ uri: fileUrl(r.image_url) }} style={StyleSheet.absoluteFill} contentFit="cover" />
+          <LinearGradient colors={["rgba(45,30,25,0.4)", "transparent", "rgba(45,30,25,0.8)"]} locations={[0, 0.4, 1]} style={StyleSheet.absoluteFill} />
           <View style={[styles.topRow, { top: insets.top + spacing.sm }]}>
             <Pressable testID="recipe-back" onPress={() => router.back()} style={styles.iconBtn}><MDIcon name="arrow-left" size={22} color={colors.onSurfaceInverse} /></Pressable>
             <View style={{ flexDirection: "row", gap: spacing.sm }}>

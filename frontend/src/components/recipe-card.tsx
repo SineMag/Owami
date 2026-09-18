@@ -20,7 +20,7 @@ export function RecipeCard({ recipe, size = "md" }: { recipe: Recipe; size?: "sm
         <LinearGradient
           colors={["transparent", "rgba(45,30,25,0.85)"]}
           locations={[0.5, 1]}
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
         />
         <View style={styles.overlay}>
           <Text numberOfLines={2} style={styles.title}>{recipe.title}</Text>

@@ -12,13 +12,13 @@ export default function Welcome() {
     <View style={styles.root}>
       <Image
         source={{ uri: "https://images.unsplash.com/photo-1761662826410-3218852da3bf?w=1200&q=80" }}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
         contentFit="cover"
       />
       <LinearGradient
         colors={["rgba(45,30,25,0.2)", "rgba(45,30,25,0.85)", "rgba(45,30,25,0.96)"]}
         locations={[0, 0.55, 1]}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
       />
       <View style={[styles.content, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.xl }]}>
         <View style={styles.top}>

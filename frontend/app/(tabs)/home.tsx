@@ -42,8 +42,8 @@ export default function Home() {
       </View>
 
       <Pressable testID="home-hero-cta" style={styles.hero} onPress={() => router.push("/(tabs)/create")}>
-        <Image source={{ uri: "https://images.unsplash.com/photo-1766596737206-214abffe65bf?w=800&q=80" }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
-        <LinearGradient colors={["rgba(192,74,44,0.15)", "rgba(45,30,25,0.9)"]} locations={[0, 1]} style={StyleSheet.absoluteFillObject} />
+        <Image source={{ uri: "https://images.unsplash.com/photo-1766596737206-214abffe65bf?w=800&q=80" }} style={StyleSheet.absoluteFill} contentFit="cover" />
+        <LinearGradient colors={["rgba(192,74,44,0.15)", "rgba(45,30,25,0.9)"]} locations={[0, 1]} style={StyleSheet.absoluteFill} />
         <View style={styles.heroContent}>
           <Text style={styles.heroKicker}>What's cooking today?</Text>
           <Text style={styles.heroTitle}>Turn what's{"\n"}in your kitchen{"\n"}into dinner.</Text>
