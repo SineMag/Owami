@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
+import { useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import MDIcon from "@react-native-vector-icons/material-design-icons";
 import { useAuth } from "@/src/hooks/useAuth";
+import { api } from "@/src/api/client";
 import { useSubscription } from "@/src/lib/revenuecat";
 import { ConfirmModal } from "@/src/components/confirm-modal";
 import { colors, radii, spacing } from "@/src/theme";
@@ -26,16 +29,47 @@ const FEATURES = [
 export default function Paywall() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { refresh } = useAuth();
-  const { currentOffering, isSubscribed, identityReady, isLoading, purchase, restore, isPurchasing, isRestoring } = useSubscription();
+  const { refresh, user } = useAuth();
+  const paystackEnabled = process.env.EXPO_PUBLIC_PAYSTACK_ENABLED === "true";
+  const paystackStatus = useQuery({
+    queryKey: ["paystack", "subscription-status"],
+    queryFn: api.subStatus,
+    enabled: paystackEnabled,
+  });
+  const { refetch: refetchPaystackStatus } = paystackStatus;
+  const { currentOffering, isSubscribed: revenueCatSubscribed, identityReady: revenueCatIdentityReady, isLoading: revenueCatLoading, purchase, restore, isPurchasing, isRestoring } = useSubscription();
   const [confirmPkg, setConfirmPkg] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const packages = currentOffering?.availablePackages ?? [];
+  const paystackPackages = (paystackStatus.data?.offerings ?? []).map((plan: any) => ({
+    identifier: plan.id,
+    product: { title: plan.title, priceString: plan.price, description: plan.period },
+    packageType: plan.period === "year" ? "ANNUAL" : "MONTHLY",
+  }));
+  const packages = paystackEnabled ? paystackPackages : (currentOffering?.availablePackages ?? []);
   const selectedPkg = packages.find(p => p.identifier === selectedId) ?? packages[0] ?? null;
+  const isSubscribed = paystackEnabled ? !!paystackStatus.data?.is_premium : revenueCatSubscribed;
+  const identityReady = paystackEnabled ? !!user?.id : revenueCatIdentityReady;
+  const isLoading = paystackEnabled ? paystackStatus.isLoading : revenueCatLoading;
+
+  useEffect(() => {
+    if (!paystackEnabled) return;
+    const verifyUrl = async (url: string | null) => {
+      if (!url) return;
+      const queryParams = Linking.parse(url).queryParams ?? {};
+      const reference = queryParams.reference ?? queryParams.trxref;
+      if (typeof reference === "string") {
+        try { await api.paystackVerify(reference); await refetchPaystackStatus(); await refresh(); }
+        catch (e: any) { setErr(String(e?.message || e)); }
+      }
+    };
+    Linking.getInitialURL().then(verifyUrl);
+    const subscription = Linking.addEventListener("url", ({ url }) => verifyUrl(url));
+    return () => subscription.remove();
+  }, [paystackEnabled, refresh, refetchPaystackStatus, user?.id]);
 
   // Prefer RevenueCat's hosted paywall on native — it uses whatever offering the customer designed.
-  if (Platform.OS !== "web" && RevenueCatUI?.Paywall) {
+  if (!paystackEnabled && Platform.OS !== "web" && RevenueCatUI?.Paywall) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.surfaceInverse }}>
         <RevenueCatUI.Paywall
@@ -58,7 +92,14 @@ export default function Paywall() {
     if (!confirmPkg) return;
     setErr(null);
     try {
-      await purchase(confirmPkg);
+      if (paystackEnabled) {
+        const checkout = await api.paystackCheckout(confirmPkg.identifier);
+        await Linking.openURL(checkout.url);
+        setConfirmPkg(null);
+        return;
+      } else {
+        await purchase(confirmPkg);
+      }
       await refresh();
       setConfirmPkg(null);
       router.back();
@@ -71,7 +112,10 @@ export default function Paywall() {
   };
   const onRestore = async () => {
     setErr(null);
-    try { await restore(); await refresh(); }
+    try {
+      await restore();
+      await refresh();
+    }
     catch (e: any) { setErr(String(e?.message || e)); }
   };
 
@@ -91,7 +135,7 @@ export default function Paywall() {
             {isSubscribed && (
               <View testID="paywall-active-badge" style={styles.activeBadge}>
                 <MDIcon name="check-circle" size={14} color={colors.onSuccess} />
-                <Text style={styles.activeT}>You're subscribed</Text>
+                <Text style={styles.activeT}>You&apos;re subscribed</Text>
               </View>
             )}
           </View>

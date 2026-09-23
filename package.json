@@ -2,10 +2,15 @@
   "dependencies": {
     "expo": "^57.0.24",
     "react-native-purchases": "^10.9.0",
-    "react-native-purchases-ui": "^10.9.0"
+    "react-native-purchases-ui": "^10.9.0",
+    "react": "19.2.3",
+    "react-native": "0.86.3"
   },
   "devDependencies": {
     "@types/react": "~19.2.4",
     "typescript": "~6.0.3"
-  }
+  },
+  "name": "Owami",
+  "version": "1.0.0",
+  "scripts": {}
 }

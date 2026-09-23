@@ -95,7 +95,12 @@ export default function NewRecipe() {
         <L label="Cover photo" />
         {imagePreview ? (
           <View style={styles.imgWrap}>
-            <Image source={{ uri: fileUrl(imagePreview) }} style={{ width: "100%", height: "100%" }} contentFit="cover" />
+            <Image
+              source={{ uri: fileUrl(imagePreview) }}
+              style={{ width: "100%", height: "100%" }}
+              contentFit="cover"
+              onError={() => setErr("The photo preview could not be displayed. Try selecting it again.")}
+            />
             {uploading && (
               <View style={styles.imgOverlay}>
                 <ActivityIndicator color={colors.onBrandPrimary} />

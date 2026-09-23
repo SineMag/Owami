@@ -39,6 +39,13 @@
       "expo-secure-store",
       "expo-web-browser",
       "expo-status-bar",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow Owami to use your microphone.",
+          "speechRecognitionPermission": "Allow Owami to recognize your speech."
+        }
+      ],
       "@react-native-vector-icons/material-design-icons",
       [
         "expo-image-picker",

@@ -10,7 +10,7 @@ This file serves as memory for any later interaction with the user's RevenueCat 
 - offering_lookup_key: default
 - Packages (package -> product_id, current price):
   - $rc_monthly -> prod99af514522   ($9.99 / P1M, trial: none)
-  - $rc_annual  -> prodb10f8fa856   ($79.99 / P1Y, trial: none)
+  - $rc_annual  -> prodb10f8fa856   ($15.99 / P1Y, trial: none)
 - Dashboard: https://app.revenuecat.com/projects/proj369db34b
 
 ## Status check

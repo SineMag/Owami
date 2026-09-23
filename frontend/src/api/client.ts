@@ -97,7 +97,10 @@ export const api = {
     req("POST", `/recipes/${id}/history?status=${status}`),
 
   subStatus: () => req<{ is_premium: boolean; offerings: any[] }>("GET", "/subscription/status"),
-  mockPurchase: () => req<{ is_premium: boolean }>("POST", "/subscription/mock-purchase"),
+  paystackCheckout: (plan: string) =>
+    req<{ url: string; reference: string }>("POST", "/subscription/paystack/checkout", { plan }),
+  paystackVerify: (reference: string) =>
+    req<{ is_premium: boolean }>("POST", "/subscription/paystack/verify", { reference }),
   restore: () => req<{ is_premium: boolean }>("POST", "/subscription/restore"),
   cancelSub: () => req<{ is_premium: boolean }>("POST", "/subscription/cancel"),
 
@@ -162,6 +165,6 @@ export const api = {
 export function fileUrl(pathOrUrl?: string) {
   if (!pathOrUrl) return "";
   if (pathOrUrl.startsWith("http")) return pathOrUrl;
-  if (pathOrUrl.startsWith("/api/")) return `${BASE}${pathOrUrl}`;
+  if (pathOrUrl.startsWith("/api/")) return `${BASE.replace(/\/$/, "")}${pathOrUrl}`;
   return pathOrUrl;
 }

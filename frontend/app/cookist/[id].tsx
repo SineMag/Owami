@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -7,7 +7,7 @@ import MDIcon from "@react-native-vector-icons/material-design-icons";
 import * as Haptics from "expo-haptics";
 import { api } from "@/src/api/client";
 import { colors, radii, spacing } from "@/src/theme";
-import { isVoiceSupported, isSpeakSupported, startListening, speak, stopSpeaking } from "@/src/voice/webVoice";
+import { isVoiceSupported, startListening, speak, stopSpeaking } from "@/src/voice/webVoice";
 
 export default function CookistMode() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -43,7 +43,7 @@ export default function CookistMode() {
       }), 1000);
     }
     return () => timerRef.current && clearInterval(timerRef.current);
-  }, [running, timerSec]);
+  }, [running, timerSec, voiceOn]);
 
   const total = r?.instructions.length ?? 0;
   const current = r?.instructions[step] ?? "";
@@ -98,6 +98,7 @@ export default function CookistMode() {
     stopListenRef.current = startListening({
       onResult: (t) => { setListening(false); handleVoiceCommand(t); },
       onError: () => { setListening(false); setMessages(m => [...m, { role: "owami", text: "I didn't catch that. Try again." }]); },
+      onEnd: () => setListening(false),
     });
   };
 

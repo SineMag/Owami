@@ -4,6 +4,8 @@ import re
 import uuid
 import json
 import base64
+import hashlib
+import hmac
 import logging
 import asyncio
 from pathlib import Path
@@ -14,7 +16,7 @@ import bcrypt
 import jwt
 import httpx
 import requests
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Header, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Header, Query, Request
 from fastapi.responses import Response
 from fastapi.concurrency import run_in_threadpool
 from starlette.middleware.cors import CORSMiddleware
@@ -34,6 +36,12 @@ MONGO_URL = os.environ["MONGO_URL"]
 DB_NAME = os.environ["DB_NAME"]
 JWT_SECRET = os.environ["JWT_SECRET"]
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
+PAYSTACK_SECRET_KEY = os.environ.get("PAYSTACK_SECRET_KEY", "")
+PAYSTACK_PLAN_MONTHLY = os.environ.get("PAYSTACK_PLAN_MONTHLY", "")
+PAYSTACK_PLAN_YEARLY = os.environ.get("PAYSTACK_PLAN_YEARLY", "")
+PAYSTACK_AMOUNT_MONTHLY = os.environ.get("PAYSTACK_AMOUNT_MONTHLY", "49900")
+PAYSTACK_AMOUNT_YEARLY = os.environ.get("PAYSTACK_AMOUNT_YEARLY", "399900")
+PAYSTACK_CALLBACK_URL = os.environ.get("PAYSTACK_CALLBACK_URL", "owami://paywall?payment=success")
 STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
 STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
 APP_NAME = "owami"
@@ -429,25 +437,131 @@ async def my_history(user=Depends(get_user)):
     recipes = {r["id"]: r for r in await db.recipes.find({"id": {"$in": ids}}, {"_id": 0}).to_list(len(ids))}
     return [{"history": h, "recipe": recipes.get(h["recipe_id"])} for h in hist if recipes.get(h["recipe_id"])]
 
-# ---------------------------------------------------------------- Subscription (stub)
+# ---------------------------------------------------------------- Subscription
+def paystack_ready() -> bool:
+    return bool(PAYSTACK_SECRET_KEY and PAYSTACK_PLAN_MONTHLY and PAYSTACK_PLAN_YEARLY)
+
+def paystack_plan(plan: str) -> tuple[str, str]:
+    plans = {
+        "monthly": (PAYSTACK_PLAN_MONTHLY, PAYSTACK_AMOUNT_MONTHLY),
+        "yearly": (PAYSTACK_PLAN_YEARLY, PAYSTACK_AMOUNT_YEARLY),
+    }
+    price = plans.get(plan)
+    if not price:
+        raise HTTPException(400, "Unknown subscription plan")
+    return price
+
+def paystack_headers() -> Dict[str, str]:
+    return {"Authorization": f"Bearer {PAYSTACK_SECRET_KEY}", "Content-Type": "application/json"}
+
+async def paystack_request(method: str, path: str, **kwargs) -> Dict[str, Any]:
+    if not PAYSTACK_SECRET_KEY:
+        raise HTTPException(503, "Paystack is not configured")
+    async with httpx.AsyncClient(timeout=20.0) as http:
+        response = await http.request(method, f"https://api.paystack.co{path}", headers=paystack_headers(), **kwargs)
+    if response.status_code >= 400 or not response.json().get("status"):
+        message = response.json().get("message", "Paystack request failed")
+        raise HTTPException(502, message)
+    return response.json()["data"]
+
 @api.get("/subscription/status")
 async def sub_status(user=Depends(get_user)):
     return {"is_premium": bool(user.get("is_premium")), "offerings": [
-        {"id": "owami_plus_monthly", "title": "Owami+ Monthly", "price": "$4.99", "period": "month"},
-        {"id": "owami_plus_yearly", "title": "Owami+ Yearly", "price": "$39.99", "period": "year", "badge": "Best value"},
+        {"id": "monthly", "title": "Owami+ Monthly", "price": "R49.90", "period": "month"},
+        {"id": "yearly", "title": "Owami+ Yearly", "price": "R399.90", "period": "year", "badge": "Best value"},
     ]}
 
-@api.post("/subscription/mock-purchase")
-async def sub_purchase(user=Depends(get_user)):
-    await db.users.update_one({"id": user["id"]}, {"$set": {"is_premium": True}})
+@api.post("/subscription/paystack/checkout")
+async def paystack_checkout(body: Dict[str, str], user=Depends(get_user)):
+    if not paystack_ready():
+        raise HTTPException(503, "Paystack is not configured")
+    plan, amount = paystack_plan(body.get("plan", ""))
+    data = await paystack_request("POST", "/transaction/initialize", json={
+        "email": user["email"],
+        "amount": amount,
+        "currency": "ZAR",
+        "plan": plan,
+        "callback_url": PAYSTACK_CALLBACK_URL,
+        "metadata": {"user_id": user["id"], "plan": body.get("plan", "")},
+    })
+    await db.users.update_one({"id": user["id"]}, {"$set": {"paystack_reference": data["reference"]}})
+    return {"url": data["authorization_url"], "reference": data["reference"]}
+
+@api.post("/subscription/paystack/verify")
+async def paystack_verify(body: Dict[str, str], user=Depends(get_user)):
+    reference = body.get("reference", "")
+    if not reference:
+        raise HTTPException(400, "Payment reference is required")
+    data = await paystack_request("GET", f"/transaction/verify/{reference}")
+    metadata = data.get("metadata") or {}
+    if (data.get("status") != "success"
+            or data.get("customer", {}).get("email", "").lower() != user["email"].lower()
+            or metadata.get("user_id") not in (None, user["id"])):
+        raise HTTPException(402, "Payment has not been completed")
+    await activate_paystack_user(user["id"], data)
     return {"is_premium": True}
+
+async def activate_paystack_user(user_id: str, data: Dict[str, Any]):
+    customer = data.get("customer") or {}
+    updates = {
+        "is_premium": True,
+        "paystack_customer_code": customer.get("customer_code"),
+        "paystack_reference": data.get("reference"),
+    }
+    subscription = data.get("subscription") or {}
+    if isinstance(subscription, dict) and subscription.get("subscription_code"):
+        updates["paystack_subscription_code"] = subscription["subscription_code"]
+    email_token = data.get("email_token") or (subscription.get("email_token") if isinstance(subscription, dict) else None)
+    if email_token:
+        updates["paystack_email_token"] = email_token
+    await db.users.update_one({"id": user_id}, {"$set": updates})
+
+@api.post("/subscription/paystack/webhook")
+async def paystack_webhook(request: Request):
+    payload = await request.body()
+    signature = request.headers.get("x-paystack-signature", "")
+    expected = hmac.new(PAYSTACK_SECRET_KEY.encode(), payload, hashlib.sha512).hexdigest()
+    if not PAYSTACK_SECRET_KEY or not signature or not hmac.compare_digest(signature, expected):
+        raise HTTPException(401, "Invalid Paystack webhook")
+    event = await request.json()
+    data = event.get("data") or {}
+    event_type = event.get("event")
+    metadata = data.get("metadata") or {}
+    user_id = metadata.get("user_id")
+    if not user_id and data.get("customer", {}).get("email"):
+        user = await db.users.find_one({"email": data["customer"]["email"].lower()})
+        user_id = user.get("id") if user else None
+    if user_id and event_type in {"charge.success", "subscription.create", "invoice.create"}:
+        if event_type == "charge.success":
+            await activate_paystack_user(user_id, data)
+    elif user_id and event_type in {"subscription.disable", "subscription.not_renew"}:
+        await db.users.update_one({"id": user_id}, {"$set": {"is_premium": False}})
+    return {"received": True}
+
+@api.post("/subscription/paystack/cancel")
+async def paystack_cancel(user=Depends(get_user)):
+    subscription_code = user.get("paystack_subscription_code")
+    if subscription_code:
+        await paystack_request("POST", "/subscription/disable", json={
+            "code": subscription_code,
+            "token": user.get("paystack_email_token", ""),
+        })
+    await db.users.update_one({"id": user["id"]}, {"$set": {"is_premium": False}})
+    return {"is_premium": False}
 
 @api.post("/subscription/restore")
 async def sub_restore(user=Depends(get_user)):
     return {"is_premium": bool(user.get("is_premium"))}
 
+@api.post("/subscription/mock-purchase")
+async def sub_mock_purchase(user=Depends(get_user)):
+    await db.users.update_one({"id": user["id"]}, {"$set": {"is_premium": True, "subscription_source": "mock"}})
+    return {"is_premium": True}
+
 @api.post("/subscription/cancel")
 async def sub_cancel(user=Depends(get_user)):
+    if PAYSTACK_SECRET_KEY and user.get("paystack_subscription_code"):
+        return await paystack_cancel(user)
     await db.users.update_one({"id": user["id"]}, {"$set": {"is_premium": False}})
     return {"is_premium": False}
 
@@ -748,17 +862,67 @@ SEED_RECIPES = [
                        "Bake at 180°C for 40 minutes.","Serve with cream."]},
 ]
 
-async def remove_demo_data():
-    demo_emails = ["cook@owami.app", "premium@owami.app"]
-    demo_users = await db.users.find(
-        {"email": {"$in": demo_emails}}, {"_id": 0, "id": 1}
-    ).to_list(length=None)
-    demo_ids = [user["id"] for user in demo_users]
-    if demo_ids:
-        await db.recipes.delete_many({"owner_id": {"$in": demo_ids}})
-    result = await db.users.delete_many({"email": {"$in": demo_emails}})
-    if demo_ids or result.deleted_count:
-        logger.info("Removed demo users and their seeded recipes")
+async def seed_demo_data():
+    demo_users = [
+        {
+            "email": "cook@owami.app",
+            "display_name": "Cookist",
+            "password": "owami123",
+            "is_premium": False,
+            "preferences": {"diet": [], "cuisines": [], "liked_ingredients": [], "disliked": [], "skill_level": None, "onboarded": True},
+        },
+        {
+            "email": "premium@owami.app",
+            "display_name": "Chef Ama",
+            "password": "owami123",
+            "is_premium": True,
+            "preferences": {"diet": [], "cuisines": [], "liked_ingredients": [], "disliked": [], "skill_level": None, "onboarded": True},
+        },
+    ]
+
+    for entry in demo_users:
+        existing = await db.users.find_one({"email": entry["email"]})
+        if existing:
+            await db.users.update_one(
+                {"email": entry["email"]},
+                {"$set": {
+                    "display_name": entry["display_name"],
+                    "password_hash": hash_pw(entry["password"]),
+                    "is_premium": entry["is_premium"],
+                    "preferences": entry["preferences"],
+                    "avatar_url": existing.get("avatar_url", ""),
+                }},
+            )
+            continue
+
+        await db.users.insert_one({
+            "id": str(uuid.uuid4()),
+            "email": entry["email"],
+            "display_name": entry["display_name"],
+            "password_hash": hash_pw(entry["password"]),
+            "avatar_url": "",
+            "is_premium": entry["is_premium"],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "preferences": entry["preferences"],
+            "auth_provider": "email",
+        })
+
+    owner = await db.users.find_one({"email": "cook@owami.app"}, {"_id": 0, "id": 1})
+    owner_id = owner["id"] if owner else str(uuid.uuid4())
+    existing_titles = {doc["title"] for doc in await db.recipes.find({}, {"_id": 0, "title": 1}).to_list(length=None)}
+    for recipe in SEED_RECIPES:
+        if recipe["title"] not in existing_titles:
+            await db.recipes.insert_one({
+                **recipe,
+                "id": str(uuid.uuid4()),
+                "owner_id": owner_id,
+                "owner_name": "Cookist",
+                "likes_count": 0,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+            existing_titles.add(recipe["title"])
+
+    logger.info("Demo users and seed recipes are ready")
 
 async def initialize_database():
     collections = {
@@ -805,7 +969,7 @@ async def initialize_database():
 async def on_startup():
     try:
         await initialize_database()
-        await remove_demo_data()
+        await seed_demo_data()
     except Exception as e:
         logger.exception(f"seed failed: {e}")
     # storage init (non-blocking)
